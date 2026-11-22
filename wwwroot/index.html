@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101112">
+  <title>Ollama Desk</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="Ollama Desk home">
+        <span class="brand-mark">O</span><span>ollama<span class="brand-light">desk</span></span>
+      </a>
+      <button class="new-chat" id="newChat"><span>＋</span> New chat</button>
+      <div class="side-label">WORKSPACE</div>
+      <button class="nav-item active" id="chatNav"><span class="nav-icon">◈</span> Chat <span class="nav-shortcut">⌘ K</span></button>
+      <button class="nav-item" id="reportsNav"><span class="nav-icon">▧</span> Business reports</button>
+      <button class="nav-item" id="scrollModels"><span class="nav-icon">▤</span> Models <span class="count-pill" id="modelCount">0</span></button>
+      <button class="nav-item" id="openCommands"><span class="nav-icon">⌘</span> Commands</button>
+      <div class="side-label model-label">YOUR MODELS <button id="refreshModels" class="icon-button" title="Refresh models">↻</button></div>
+      <div id="sidebarModels" class="sidebar-models"><div class="side-empty">Loading models…</div></div>
+      <div class="sidebar-bottom">
+        <div class="connection"><span class="status-dot" id="statusDot"></span><span id="connectionText">Connecting to Ollama…</span></div>
+        <div class="connection-url" id="connectionUrl"></div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="breadcrumb"><span>Workspace</span><span class="crumb-sep">/</span><strong id="pageTitle">Chat</strong></div>
+        <div class="top-actions">
+          <span class="local-badge"><span></span> LOCAL</span>
+          <button class="icon-button help-button" id="openAbout" title="About Ollama Desk">?</button>
+        </div>
+      </header>
+
+      <section class="monitor-strip" aria-label="System monitor">
+        <div class="monitor-heading"><span class="pulse-icon">⌁</span><span>LIVE SYSTEM</span><span class="live-dot"></span></div>
+        <div class="metric-card">
+          <div class="metric-head"><span class="metric-icon cpu-icon">⌘</span><span>CPU</span><strong id="cpuValue">—</strong></div>
+          <div class="meter"><span id="cpuMeter"></span></div><div class="metric-caption" id="cpuCaption">System utilization</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-head"><span class="metric-icon memory-icon">▤</span><span>MEMORY</span><strong id="memoryValue">—</strong></div>
+          <div class="meter"><span id="memoryMeter"></span></div><div class="metric-caption" id="memoryCaption">Used / total</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-head"><span class="metric-icon gpu-icon">◈</span><span>GPU / VRAM</span><strong id="gpuValue">—</strong></div>
+          <div class="meter gpu-meter"><span id="gpuMeter"></span></div><div class="metric-caption" id="gpuCaption">Ollama model allocation</div>
+        </div>
+        <button class="monitor-refresh" id="refreshMetrics" title="Refresh system metrics">↻</button>
+      </section>
+
+      <details class="memory-users">
+        <summary><span>▤ Top memory users</span><span id="memoryUsersSummary">See which apps are using memory</span></summary>
+        <div id="memoryUsersList" class="memory-users-list"><div class="side-empty">Collecting process memory…</div></div>
+        <p id="memoryAdvice" class="memory-advice"></p>
+      </details>
+
+      <div class="content-grid" id="contentGrid">
+        <section class="chat-column" id="chatColumn">
+          <div class="chat-toolbar">
+            <div class="selected-model">
+              <span class="model-orb">◈</span>
+              <select id="chatModel" aria-label="Select chat model"><option value="">Select a model…</option></select>
+              <span class="select-chevron">⌄</span>
+            </div>
+            <div class="chat-tools"><button class="tool-button" id="clearChat" title="Clear conversation">⌫ <span>Clear</span></button></div>
+          </div>
+          <div id="chatMessages" class="chat-messages">
+            <div class="welcome" id="welcome">
+              <div class="welcome-glyph">✳</div>
+              <div class="eyebrow">YOUR LOCAL AI WORKSPACE</div>
+              <h1>What’s on your mind?</h1>
+              <p>Chat privately with a model running on your machine.</p>
+              <div class="suggestions">
+                <button class="suggestion" data-prompt="Explain a concept to me like I’m new to it."><span>↗</span> Explain a concept simply</button>
+                <button class="suggestion" data-prompt="Help me brainstorm ideas for a side project."><span>✳</span> Brainstorm something new</button>
+                <button class="suggestion" data-prompt="Write a short Python script that organizes files by extension."><span>⌘</span> Get help with code</button>
+              </div>
+            </div>
+          </div>
+          <form id="chatForm" class="composer">
+            <textarea id="messageInput" rows="1" placeholder="Message your model…" aria-label="Message your model"></textarea>
+            <div class="composer-footer">
+              <span class="privacy-note"><span>◉</span> Your conversations stay on this device</span>
+              <div class="composer-actions"><span class="enter-hint">↵ to send</span><button id="sendButton" class="send-button" type="submit" title="Send message" disabled>↑</button></div>
+            </div>
+          </form>
+          <div class="chat-footnote">AI responses can be inaccurate. Review important information.</div>
+        </section>
+
+        <section id="reportsColumn" class="reports-column" hidden>
+          <div class="reports-header">
+            <div class="eyebrow">LOCAL SQLITE · READ-ONLY REPORTING</div>
+            <h1>Ask your business data</h1>
+            <p>Ask a question in plain language. Your selected Ollama model writes a read-only query and returns the matching rows.</p>
+            <div class="report-database-status"><span class="status-dot connected"></span><span id="reportDatabaseStatus">Loading database schema…</span></div>
+          </div>
+          <div class="report-schema-wrap">
+            <details class="report-schema-details">
+              <summary>Available tables and columns</summary>
+              <div id="reportSchema" class="report-schema">Loading schema…</div>
+            </details>
+          </div>
+          <div id="reportFeed" class="report-feed">
+            <div id="reportWelcome" class="report-welcome">
+              <h2>Try a question</h2>
+              <p>This starter database contains sample sales, customers, regions, products, and orders.</p>
+              <div class="report-suggestions">
+                <button class="report-suggestion" data-report-question="What was total completed sales by region?">Completed sales by region</button>
+                <button class="report-suggestion" data-report-question="Show monthly completed sales for 2026.">Monthly sales in 2026</button>
+                <button class="report-suggestion" data-report-question="Which products generated the most revenue?">Top products by revenue</button>
+              </div>
+            </div>
+          </div>
+          <form id="reportForm" class="report-composer">
+            <textarea id="reportQuestion" rows="2" maxlength="2000" placeholder="Ask a question about sales, customers, products…" aria-label="Ask your business data"></textarea>
+            <div class="report-composer-footer">
+              <label for="reportModel" class="report-model-label">MODEL</label>
+              <select id="reportModel" class="report-model-select" aria-label="Model for business reports"><option value="">Select a model…</option></select>
+              <span class="privacy-note">Data stays on this computer</span>
+              <button id="runReportButton" class="send-button" type="submit" title="Run report" disabled>↑</button>
+            </div>
+          </form>
+          <div class="chat-footnote">Generated SQL is restricted to read-only queries. Check reports before using them for decisions.</div>
+        </section>
+
+        <aside class="settings-panel" id="settingsPanel">
+          <div class="panel-title"><div><span class="panel-icon">☷</span><h2>Parameters</h2></div><button id="resetParams" class="text-button">Reset</button></div>
+          <p class="panel-description">Fine-tune how your model responds.</p>
+          <label class="range-label" for="temperature"><span>Temperature</span><span id="temperatureValue">0.7</span></label>
+          <input class="range-input" id="temperature" type="range" min="0" max="2" step="0.1" value="0.7">
+          <div class="range-hints"><span>Focused</span><span>Creative</span></div>
+          <label class="field-label" for="topP">Top P <span>Probability cutoff</span></label>
+          <div class="number-field"><input id="topP" type="number" min="0" max="1" step="0.05" value="0.9"><span>0–1</span></div>
+          <label class="field-label" for="topK">Top K <span>Token choices</span></label>
+          <div class="number-field"><input id="topK" type="number" min="1" max="100" step="1" value="40"><span>1–100</span></div>
+          <label class="field-label" for="numCtx">Context length <span>Tokens</span></label>
+          <div class="number-field"><input id="numCtx" type="number" min="512" max="131072" step="512" value="4096"><span>num_ctx</span></div>
+          <label class="field-label" for="repeatPenalty">Repeat penalty <span>Reduce repetition</span></label>
+          <div class="number-field"><input id="repeatPenalty" type="number" min="0.5" max="2" step="0.05" value="1.1"><span>0.5–2</span></div>
+          <div class="advanced-divider"></div>
+          <details class="advanced-options">
+            <summary><span>Advanced options</span><span class="summary-chevron">⌄</span></summary>
+            <label class="field-label" for="seed">Seed <span>Reproducible output</span></label>
+            <div class="number-field"><input id="seed" type="number" placeholder="-1"><span>-1 = random</span></div>
+          </details>
+          <div class="settings-note"><span>ⓘ</span> Parameters are applied to your next message.</div>
+          <div class="running-section">
+            <div class="running-heading"><span>LOADED MODELS</span><button class="icon-button" id="refreshRunning" title="Refresh loaded models">↻</button></div>
+            <div class="loaded-model-controls">
+              <select id="runningModelSelect" class="command-select" aria-label="Select a loaded model to offload">
+                <option value="">No models loaded</option>
+              </select>
+              <button id="unloadSelected" class="secondary-button unload-button" type="button" disabled>Offload</button>
+            </div>
+            <div id="runningModels" class="running-models"><div class="side-empty">Checking…</div></div>
+          </div>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+
+  <dialog id="commandsDialog" class="dialog">
+    <form method="dialog" class="dialog-top"><div><span class="panel-icon">⌘</span><h2>Ollama commands</h2></div><button class="icon-button close-dialog" aria-label="Close">×</button></form>
+    <p class="dialog-description">Run common model-management actions against your local Ollama instance.</p>
+    <label class="field-label" for="commandSelect">Action</label>
+    <select id="commandSelect" class="command-select">
+      <option value="pull">Pull a model</option><option value="show">Show model details</option>
+      <option value="copy">Copy a model</option><option value="unload">Unload a running model</option>
+      <option value="delete">Delete a model</option>
+    </select>
+    <div id="pullModelField" hidden>
+      <label class="field-label" for="popularModelSelect">Model to pull</label>
+      <select id="popularModelSelect" class="command-select">
+        <option value="">Choose a popular model…</option>
+        <option value="llama3.2:latest">Llama 3.2 · general purpose</option>
+        <option value="qwen3.5:9b">Qwen 3.5 9B · general purpose</option>
+        <option value="qwen3.5:4b">Qwen 3.5 4B · lightweight</option>
+        <option value="deepseek-r1:8b">DeepSeek R1 8B · reasoning</option>
+        <option value="gemma3:4b">Gemma 3 4B · lightweight</option>
+        <option value="mistral:latest">Mistral · general purpose</option>
+        <option value="phi4:latest">Phi 4 · reasoning</option>
+        <option value="other">Other…</option>
+      </select>
+      <input id="otherPullModel" class="dialog-input other-model-input" placeholder="Enter a model name, e.g. llama3.2:latest" hidden>
+    </div>
+    <div id="namedModelField">
+      <label class="field-label" id="commandModelLabel" for="commandModel">Model name</label>
+      <input id="commandModel" class="dialog-input" placeholder="e.g. llama3.2:latest">
+    </div>
+    <div id="copyDestinationField" hidden><label class="field-label" for="copyDestination">New model name</label><input id="copyDestination" class="dialog-input" placeholder="e.g. my-llama-copy"></div>
+    <div id="commandProgress" class="command-progress" hidden><div class="meter"><span id="commandProgressMeter"></span></div><p id="commandProgressText"></p></div>
+    <pre id="commandResult" class="command-result" hidden></pre>
+    <div class="dialog-actions"><button type="button" class="secondary-button" id="cancelCommand">Cancel</button><button type="button" class="primary-button" id="runCommand">Run command</button></div>
+    <div class="command-safety">Commands are sent to Ollama’s local API. No arbitrary shell commands are executed.</div>
+  </dialog>
+
+  <dialog id="aboutDialog" class="dialog about-dialog">
+    <form method="dialog" class="dialog-top"><div><span class="panel-icon">◈</span><h2>About Ollama Desk</h2></div><button class="icon-button close-dialog" aria-label="Close">×</button></form>
+    <p class="dialog-description">A private, local interface for chatting with Ollama models, managing your model library, and keeping an eye on system resources.</p>
+    <div class="about-facts"><span>Local by default</span><span>Built with ASP.NET Core</span><span>No account or cloud service required</span></div>
+    <p class="command-safety">CPU and memory use system metrics. GPU utilization depends on hardware sensors; active model VRAM placement is shown when Ollama reports it.</p>
+    <div class="dialog-actions"><button class="primary-button" value="close">Done</button></div>
+  </dialog>
+</body>
+</html>

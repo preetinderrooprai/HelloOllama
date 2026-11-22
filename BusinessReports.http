@@ -1,0 +1,23 @@
+@baseUrl = http://localhost:5229
+@model = qwen3.5:9b
+
+### Inspect tables and columns available to reports
+GET {{baseUrl}}/api/reports/schema
+
+### Ask a sample business question
+POST {{baseUrl}}/api/reports/query
+Content-Type: application/json
+
+{
+  "model": "{{model}}",
+  "question": "What was total completed sales by region?"
+}
+
+### Invalid model names are reported by Ollama as a gateway error
+POST {{baseUrl}}/api/reports/query
+Content-Type: application/json
+
+{
+  "model": "model-that-does-not-exist",
+  "question": "Show completed sales by region"
+}
