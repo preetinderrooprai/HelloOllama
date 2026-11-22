@@ -26,7 +26,7 @@ var databaseCatalog = configuredDatabasePath is null
             "Access control demo",
             Path.Combine(builder.Environment.ContentRootPath, "data", "access-control-demo.sqlite"),
             isDemoData: true,
-            businessRules: "This is synthetic physical access-control data. Join swipes to sites through readers and doors using the declared foreign keys. Join swipes to cardholders through cards. Attendance is precomputed in attendance_records; timestamps ending in Z are UTC.",
+            businessRules: "This is synthetic physical access-control data. Join swipes to sites through readers and doors using the declared foreign keys. Join swipes to cardholders through cards. Attendance is precomputed in attendance_records; timestamps ending in Z are UTC. Enum values are case-sensitive and uppercase: swipes.access_result is GRANTED or DENIED; swipes.direction is IN, OUT, or ACCESS; cardholders.status is ACTIVE or INACTIVE; cards.status is ACTIVE, EXPIRED, or DISABLED; door and reader status is ONLINE or OFFLINE; door activity severity is INFO, WARNING, or ALARM. The sample contains swipe and attendance records only from 2026-11-16 through 2026-11-18; relative recent-date queries can legitimately return no rows.",
             setupScriptPath: Path.Combine(builder.Environment.ContentRootPath, "data", "access-control-demo.sql"))
     ], "sales-demo")
     : new BusinessDatabaseCatalog(

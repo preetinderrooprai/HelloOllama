@@ -382,6 +382,14 @@ function renderReportResult(container, report) {
   const summary = document.createElement('p');
   summary.className = 'report-summary';
   summary.textContent = safeText(report.summary);
+  if (report.needsClarification) {
+    const meta = document.createElement('p');
+    meta.className = 'report-meta';
+    meta.textContent = `Clarification needed · ${report.databaseName}`;
+    container.append(summary, meta);
+    return;
+  }
+
   const meta = document.createElement('p');
   meta.className = 'report-meta';
   const rowCount = report.rows?.length || 0;

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#101112">
   <title>Ollama Desk</title>
   <link rel="stylesheet" href="/styles.css">
-  <script src="/app.js" defer></script>
+  <script src="/app.js?v=reports-db-selector" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -98,7 +98,7 @@
           <div class="reports-header">
             <div class="eyebrow">LOCAL SQLITE · READ-ONLY REPORTING</div>
             <h1>Ask your business data</h1>
-            <p>Ask a question in plain language. Your selected Ollama model writes a read-only query and returns the matching rows.</p>
+            <p>Ask a question in plain language. Each report is independent, so include specific names or IDs instead of relying on earlier questions.</p>
             <div class="report-database-status"><span class="status-dot connected"></span><span id="reportDatabaseStatus">Loading database schema…</span></div>
           </div>
           <div class="report-schema-wrap">

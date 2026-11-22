@@ -1,14 +1,16 @@
 @baseUrl = http://localhost:5229
 @model = qwen3.5:4b
+@databaseId = sales-demo
 
 ### Inspect tables and columns available to reports
-GET {{baseUrl}}/api/reports/schema
+GET {{baseUrl}}/api/reports/schema?databaseId={{databaseId}}
 
 ### Ask a sample business question
 POST {{baseUrl}}/api/reports/query
 Content-Type: application/json
 
 {
+  "databaseId": "{{databaseId}}",
   "model": "{{model}}",
   "question": "What was total completed sales by region?"
 }
@@ -18,6 +20,7 @@ POST {{baseUrl}}/api/reports/query
 Content-Type: application/json
 
 {
+  "databaseId": "{{databaseId}}",
   "model": "model-that-does-not-exist",
   "question": "Show completed sales by region"
 }

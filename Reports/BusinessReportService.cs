@@ -102,6 +102,21 @@ public sealed class BusinessReportService(
 
         for (var attempt = 0; ; attempt++)
         {
+            if (generated.NeedsClarification)
+            {
+                return new BusinessReportResponse(
+                    generated.Summary,
+                    string.Empty,
+                    [],
+                    [],
+                    false,
+                    database.Id,
+                    database.DisplayName,
+                    database.IsDemoData,
+                    DateTimeOffset.UtcNow,
+                    NeedsClarification: true);
+            }
+
             var sql = ValidateReadOnlySql(generated.Sql);
             try
             {
@@ -135,7 +150,7 @@ public sealed class BusinessReportService(
         }
     }
 
-    private async Task<(string Summary, string Sql)> GenerateSqlAsync(
+    private async Task<(string Summary, string Sql, bool NeedsClarification)> GenerateSqlAsync(
         BusinessDatabase database,
         string model,
         string question,
@@ -145,15 +160,18 @@ public sealed class BusinessReportService(
     {
         var systemPrompt = """
             You write read-only SQLite business reports.
-            Return one JSON object with exactly these string properties: "summary" and "sql".
+            Return one JSON object with exactly these properties: string "summary", string "sql", and boolean "needsClarification".
             The summary is a short description of the report.
             The sql must be exactly one SELECT query (a WITH clause ending in SELECT is allowed).
             Use only the listed tables and columns. Follow declared foreign-key relationships for joins, joining each foreign-key column directly to its referenced column.
             Do not add tables that are not needed to answer the question or infer relationships that are not listed.
+            Treat the request as stateless: only the current question is available, not previous questions or results. Do not guess what a pronoun such as "he", "she", or "they" refers to. If a person or other required detail is not explicitly identified, set needsClarification to true, ask for the missing detail in summary, and set sql to SELECT 1 WHERE 0. Never return unrelated rows when clarification is needed.
+            For counts of related events grouped by a parent entity, join through the declared foreign keys and count distinct event IDs. When the user asks for all parent entities, use LEFT JOIN so entities with no events remain visible; do not return event-level rows unless requested.
+            Use exact case-sensitive enum values from the business rules; do not translate or change their casing.
             Do not write comments or a semicolon.
             Never use PRAGMA, ATTACH, extension functions, filesystem functions, or any data-changing operation.
             Include a LIMIT 100 for detail rows. For aggregate reports, keep the result concise.
-            If the question cannot be answered from the schema, return a SELECT that returns no rows and explain the limitation in summary.
+            If the question cannot be answered from the schema, set needsClarification to true, explain the limitation in summary, and set sql to SELECT 1 WHERE 0.
             """;
         var userPrompt = $"Available SQLite schema:\n{schema}\n\nBusiness rules:\n{database.BusinessRules}\n\nBusiness question:\n{question}";
         if (correction is not null)
@@ -201,12 +219,15 @@ public sealed class BusinessReportService(
             using var generated = JsonDocument.Parse(content);
             var summary = generated.RootElement.GetProperty("summary").GetString();
             var sql = generated.RootElement.GetProperty("sql").GetString();
-            if (string.IsNullOrWhiteSpace(summary) || string.IsNullOrWhiteSpace(sql))
+            var clarification = generated.RootElement.GetProperty("needsClarification");
+            if (string.IsNullOrWhiteSpace(summary) ||
+                string.IsNullOrWhiteSpace(sql) ||
+                clarification.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
             {
                 throw new InvalidDataException("Ollama returned an incomplete report query.");
             }
 
-            return (summary.Trim(), sql.Trim());
+            return (summary.Trim(), sql.Trim(), clarification.GetBoolean());
         }
         catch (Exception exception) when (exception is JsonException or InvalidOperationException or
                                            KeyNotFoundException)

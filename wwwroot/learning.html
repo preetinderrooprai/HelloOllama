@@ -177,7 +177,7 @@
         </article>
         <article class="learning-card">
           <h3>Request and response types · <code>BusinessReportModels</code></h3>
-          <p><code>BusinessReportRequest</code> carries the optional database ID, model, and question. <code>BusinessSchemaResponse</code> and <code>BusinessTableSchemaResponse</code> describe the selected database schema. <code>BusinessReportResponse</code> carries the summary, SQL, rows, truncation flag, database identity, and timestamp. <code>ReportDatabaseSelectionException</code> represents an unavailable ID; <code>ReportQueryException</code> represents SQL rejected by the safety check.</p>
+          <p><code>BusinessReportRequest</code> carries the optional database ID, model, and question. Each question is independent; include names or IDs explicitly. <code>BusinessReportResponse</code> carries the summary, SQL, rows, truncation flag, database identity, clarification flag, and timestamp. Clarification responses never execute the model's SQL or return rows. <code>ReportDatabaseSelectionException</code> represents an unavailable ID; <code>ReportQueryException</code> represents SQL rejected by the safety check.</p>
         </article>
       </div>
     </section>

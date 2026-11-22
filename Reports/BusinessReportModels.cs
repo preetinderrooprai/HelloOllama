@@ -45,7 +45,8 @@ public sealed record BusinessReportResponse(
     string DatabaseId,
     string DatabaseName,
     bool IsDemoData,
-    DateTimeOffset GeneratedAt);
+    DateTimeOffset GeneratedAt,
+    bool NeedsClarification = false);
 
 /// <summary>Represents a report query rejected by the read-only SQL guard.</summary>
 public sealed class ReportQueryException(string message) : Exception(message);
