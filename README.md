@@ -1,4 +1,4 @@
-# Ollama Desk
+# HelloOllama
 
 A local .NET web app for chatting with Ollama, managing models, asking read-only business questions against SQLite, and monitoring system resources.
 
