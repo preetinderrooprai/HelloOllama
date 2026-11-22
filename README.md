@@ -2,6 +2,10 @@
 
 A local .NET web app for chatting with Ollama, managing models, asking read-only business questions against SQLite, and monitoring system resources.
 
+<img width="606" height="543" alt="image" src="https://github.com/user-attachments/assets/90ec03a3-8cd2-4588-8cf7-9177daef6375" />
+
+
+
 ## Requirements
 
 - .NET 10 SDK
