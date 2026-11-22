@@ -18,6 +18,7 @@
       <div class="side-label">WORKSPACE</div>
       <button class="nav-item active" id="chatNav"><span class="nav-icon">◈</span> Chat <span class="nav-shortcut">⌘ K</span></button>
       <button class="nav-item" id="reportsNav"><span class="nav-icon">▧</span> Business reports</button>
+      <a class="nav-item" href="/learning.html"><span class="nav-icon">ⓘ</span> Learn reports</a>
       <button class="nav-item" id="scrollModels"><span class="nav-icon">▤</span> Models <span class="count-pill" id="modelCount">0</span></button>
       <button class="nav-item" id="openCommands"><span class="nav-icon">⌘</span> Commands</button>
       <div class="side-label model-label">YOUR MODELS <button id="refreshModels" class="icon-button" title="Refresh models">↻</button></div>
@@ -120,9 +121,11 @@
           <form id="reportForm" class="report-composer">
             <textarea id="reportQuestion" rows="2" maxlength="2000" placeholder="Ask a question about sales, customers, products…" aria-label="Ask your business data"></textarea>
             <div class="report-composer-footer">
+              <label for="reportDatabase" class="report-model-label">DATABASE</label>
+              <select id="reportDatabase" class="report-model-select" aria-label="Database for business reports" disabled><option value="">Loading databases…</option></select>
               <label for="reportModel" class="report-model-label">MODEL</label>
               <select id="reportModel" class="report-model-select" aria-label="Model for business reports"><option value="">Select a model…</option></select>
-              <span class="privacy-note">Data stays on this computer</span>
+              <span class="privacy-note">Question and schema go to Ollama</span>
               <button id="runReportButton" class="send-button" type="submit" title="Run report" disabled>↑</button>
             </div>
           </form>

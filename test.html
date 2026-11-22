@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python Programming Basics</title>
+    <style>
+        :root {
+            --primary-color: #3776ab; /* Python Blue */
+            --secondary-color: #ffd343; /* Python Yellow */
+            --bg-color: #f4f7f6;
+            --text-color: #333;
+            --code-bg: #2d2d2d;
+            --code-text: #f8f8f2;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 2rem 1rem;
+            text-align: center;
+            border-bottom: 5px solid var(--secondary-color);
+        }
+
+        nav {
+            position: sticky;
+            top: 0;
+            background: white;
+            padding: 1rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            text-align: center;
+            z-index: 1000;
+        }
+
+        nav a {
+            margin: 0 15px;
+            text-decoration: none;
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        section {
+            background: white;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        h2 {
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--secondary-color);
+            padding-bottom: 10px;
+        }
+
+        .example-box {
+            background-color: #eef6ff;
+            border-left: 5px solid var(--primary-color);
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+
+        pre {
+            background-color: var(--code-bg);
+            color: var(--code-text);
+            padding: 1.5rem;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-family: 'Courier New', Courier, monospace;
+            line-height: 1.4;
+        }
+
+        code {
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        .comment {
+            color: #66d9ef;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            font-size: 0.9rem;
+            color: #777;
+        }
+
+        .highlight {
+            color: #e67e22;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Python Programming Basics</h1>
+    <p>A beginner's guide to the world's most popular programming language.</p>
+</header>
+
+<nav>
+    <a href="#variables">Variables</a>
+    <a href="#datatypes">Data Types</a>
+    <a href="#controlflow">Control Flow</a>
+    <a href="#functions">Functions</a>
+    <a href="#collections">Collections</a>
+</nav>
+
+<div class="container">
+    
+    <!-- Section 1: Variables -->
+    <section id="variables">
+        <h2>1. Variables and Assignment</h2>
+        <p>Variables are containers for storing data values. In Python, you don't need to declare the type of a variable; it is determined automatically based on the value assigned.</p>
+        
+        <div class="example-box">
+            <strong>Rule:</strong> Variable names must start with a letter or underscore, and are case-sensitive (e.g., <code>age</code> and <code>Age</code> are different).
+        </div>
+
+        <pre><code><span class="comment"># This is a comment - Python ignores this</span>
+name = "Alice"          <span class="comment"># String variable</span>
+age = 25                 <span class="comment"># Integer variable</span>
+is_student = True        <span class="comment"># Boolean variable</span>
+
+<span class="comment"># Printing the variables</span>
+print(name)
+print(age)</code></pre>
+    </section>
+
+    <!-- Section 2: Data Types -->
+    <section id="datatypes">
+        <h2>2. Basic Data Types</h2>
+        <p>Python has several built-in data types used to represent different kinds of information:</p>
+        <ul>
+            <li><strong>Int:</strong> Whole numbers (e.g., 10, -5)</li>
+            <li><strong>Float:</strong> Decimal numbers (e.g., 10.5, 3.14)</li>
+            <li><strong>String:</strong> Textual data wrapped in quotes ("Hello")</li>
+            <li><strong>Boolean:</strong> Logical values (True or False)</li>
+        </ul>
+
+        <pre><code># Demonstrating different types
+x = 10               # int
+y = 3.14             # float
+name = "Python"      # str
+is_easy = True       # bool
+
+<span class="comment"># Checking the type of a variable</span>
+print(type(x))       <span class="comment"># Output: &lt;class 'int'&gt;</span>
+print(type(name))    <span class="comment"># Output: &lt;class 'str'&gt;</span></code></pre>
+    </section>
+
+    <!-- Section 3: Control Flow -->
+    <section id="controlflow">
+        <h2>3. Control Flow (If/Else & Loops)</h2>
+        <p>Control flow allows your program to make decisions and repeat actions.</p>
+        
+        <h3>Conditional Statements</h3>
+        <p>The <code>if</code> statement executes a block of code only if a specific condition is met.</p>
+
+        <pre><code>age = 18
+
+<span class="comment"># Simple If/Else</span>
+if age >= 18:
+    print("You are an adult.")
+else:
+    print("You are a minor.")
+
+<span class="comment"># Using elif for multiple conditions</span>
+score = 85
+if score >= 90:
+    print("Grade: A")
+elif score >= 80:
+    print("Grade: B")
+else:
+    print("Grade: C")</code></pre>
+    </section>
+
+    <section id="loops">
+        <h2>4. Loops</h2>
+        <p>Loops are used to repeat a block of code multiple times.</p>
+        <ul>
+            <li><strong>For Loop:</strong> Used for iterating over a sequence (like a list or range).</li>
+            <li><strong>While Loop:</strong> Used to repeat as long as a condition remains True.</li>
+        </ul>
+
+        <pre><code><span class="comment"># For loop printing numbers 0 to 4</span>
+for i in range(5):
+    print("Number:", i)
+
+<span class="comment"># While loop - runs until condition is False</span>
+count = 0
+while count < 3:
+    print("Count is:", count)
+    count += 1</code></pre>
+    </section>
+
+    <!-- Section 4: Functions -->
+    <section id="functions">
+        <h2>5. Functions</h2>
+        <p>A function is a reusable block of code that only runs when it is called. You define them using the <code>def</code> keyword.</p>
+
+        <pre><code><span class="comment"># Defining a function</span>
+def greet_user(username):
+    return f"Hello, {username}! Welcome to Python."
+
+<span class="comment"># Calling the function</span>
+message = greet_user("John")
+print(message)
+
+<span class="comment"># Function with parameters and logic</span>
+def add_numbers(a, b):
+    return a + b
+
+print(add_numbers(5, 10))</code></pre>
+    </section>
+
+    <!-- Section 5: Collections -->
+    <section id="collections">
+        <h2>6. Common Data Structures</h2>
+        <p>Python provides powerful built-in types to store collections of data.</p>
+        
+        <h3>Lists</h3>
+        <p>Ordered, changeable collections. Allows duplicate members.</p>
+        <pre><code>fruits = ["Apple", "Banana", "Cherry"]
+fruits.append("Orange")
+print(fruits[0]) <span class="comment"># Access first item</span></pre>
+
+        <h3>Dictionaries</h3>
+        <p>Unordered, changeable collections of <strong>Key:Value</strong> pairs.</p>
+        <pre><code>user = {
+    "name": "Jane",
+    "age": 28,
+    "city": "New York"
+}
+print(user["name"]) <span class="comment"># Accessing value by key</span></code></pre>
+    </section>
+
+</div>
+
+<footer>
+    <p>Created for Python Learning &copy; 2023 | Keep Coding!</p>
+</footer>
+
+</body>
+</html>

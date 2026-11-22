@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101112">
+  <meta name="description" content="Learn how Ollama Desk turns business questions into read-only SQLite reports.">
+  <title>Business Reports Guide · Ollama Desk</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="learning-page">
+  <header class="learning-topbar">
+    <a class="brand" href="/" aria-label="Ollama Desk home">
+      <span class="brand-mark">O</span><span>ollama<span class="brand-light">desk</span></span>
+    </a>
+    <a class="learning-back" href="/">Back to Ollama Desk</a>
+  </header>
+
+  <main class="learning-main">
+    <section class="learning-hero">
+      <div class="eyebrow">BUSINESS REPORTS · LEARNING GUIDE</div>
+      <h1>From a question to a report</h1>
+      <p>Learn what each reporting control does, how a model prepares a query, and how to check the results.</p>
+      <a class="learning-cta" href="/">Open Ollama Desk <span aria-hidden="true">→</span></a>
+    </section>
+
+    <nav class="learning-toc" aria-label="Guide sections">
+      <a href="#controls">Screen controls</a>
+      <a href="#workflow">How it works</a>
+      <a href="#architecture">Classes and functions</a>
+      <a href="#validation-flow">Validations</a>
+      <a href="#good-questions">Ask better questions</a>
+      <a href="#safety">Data and safeguards</a>
+      <a href="#troubleshooting">Troubleshooting</a>
+    </nav>
+
+    <section class="learning-section" id="controls">
+      <div class="learning-section-heading">
+        <div class="eyebrow">01 · THE SCREEN</div>
+        <h2>What each reporting control does</h2>
+        <p>Open <strong>Business reports</strong> from the app sidebar to see these controls.</p>
+      </div>
+      <div class="learning-cards">
+        <article class="learning-card">
+          <span class="learning-card-number">A</span>
+          <h3>Database status</h3>
+          <p>Shows whether reports are using the built-in sample database or a SQLite database you configured. “Read only” means report queries cannot change its data.</p>
+        </article>
+        <article class="learning-card">
+          <span class="learning-card-number">B</span>
+          <h3>Available tables and columns</h3>
+          <p>Expand this panel to see the tables, columns, and foreign-key join paths supplied to the model. Use these exact names when asking for a specific field.</p>
+        </article>
+        <article class="learning-card">
+          <span class="learning-card-number">C</span>
+          <h3>Question box and suggestions</h3>
+          <p>Type a business question in plain language, or select a sample suggestion to fill the box. Questions can be up to 2,000 characters.</p>
+        </article>
+        <article class="learning-card">
+          <span class="learning-card-number">D</span>
+          <h3>Model selector</h3>
+          <p>Choose an installed Ollama model for this report. Smaller models can respond faster; larger models may be more capable but use more memory.</p>
+        </article>
+        <article class="learning-card">
+          <span class="learning-card-number">E</span>
+          <h3>Run report</h3>
+          <p>Select the up-arrow button to send the question and schema to Ollama. It is enabled when you have entered a question and selected a model.</p>
+        </article>
+        <article class="learning-card">
+          <span class="learning-card-number">F</span>
+          <h3>Summary and results table</h3>
+          <p>Read the model’s short description, then inspect the returned columns and rows. Results are capped at 100 rows; a “limited to 100” note means more rows matched.</p>
+        </article>
+        <article class="learning-card">
+          <span class="learning-card-number">G</span>
+          <h3>View generated SQL</h3>
+          <p>Expand this section to inspect the exact SQL that ran. Check its filters, joins, grouping, and totals before relying on a report.</p>
+        </article>
+        <article class="learning-card">
+          <span class="learning-card-number">H</span>
+          <h3>Retry question</h3>
+          <p>If a generated query has a SQLite syntax or schema error, the app asks the model once to correct it. If that still fails, use this button to resubmit the original question with the same model.</p>
+        </article>
+      </div>
+      <p class="learning-note"><strong>Each report is independent.</strong> The reporting feature does not send earlier questions or results as chat history. Instead of typing “try again” or “show me that order,” use <strong>Retry question</strong> or include the relevant customer, order ID, date, or other details in a new question.</p>
+    </section>
+
+    <section class="learning-section" id="workflow">
+      <div class="learning-section-heading">
+        <div class="eyebrow">02 · BEHIND THE SCENES</div>
+        <h2>How a report is produced</h2>
+        <p>The model writes a query; SQLite, not the model, reads the database and calculates the returned rows.</p>
+      </div>
+      <ol class="learning-steps">
+        <li><span>1</span><div><h3>The app reads the schema</h3><p>It finds the available table and column names in the configured SQLite database.</p></div></li>
+        <li><span>2</span><div><h3>The question goes to Ollama</h3><p>The app sends your question, the schema, and (for the demo database) sample-sales definitions to the selected model.</p></div></li>
+        <li><span>3</span><div><h3>The model returns a report query</h3><p>Ollama returns a short summary and one SQLite <code>SELECT</code> query. If a SQLite syntax/schema error occurs, the app requests one corrected query.</p></div></li>
+        <li><span>4</span><div><h3>The app checks and runs the query</h3><p>The query must pass the read-only checks, then it runs against a read-only database connection. The app returns the summary, SQL, and up to 100 rows.</p></div></li>
+      </ol>
+      <div class="learning-workflows">
+        <article class="learning-workflow-card">
+          <h3>Successful report workflow</h3>
+          <ol class="learning-arrow-flow" aria-label="Successful report workflow">
+            <li><strong>Question</strong><span>Browser checks the text and selected model.</span></li>
+            <li class="learning-arrow" aria-hidden="true">→</li>
+            <li><strong>API request</strong><span><code>runBusinessReport()</code> posts to the report endpoint.</span></li>
+            <li class="learning-arrow" aria-hidden="true">→</li>
+            <li><strong>Generate and validate</strong><span>Service asks Ollama for SQL, then applies the read-only checks.</span></li>
+            <li class="learning-arrow" aria-hidden="true">→</li>
+            <li><strong>Execute and display</strong><span>SQLite returns rows; the browser renders the summary, table, and SQL.</span></li>
+          </ol>
+        </article>
+        <article class="learning-workflow-card">
+          <h3>SQL error and repair workflow</h3>
+          <ol class="learning-arrow-flow" aria-label="SQL error repair workflow">
+            <li><strong>SQLite error</strong><span>A syntax or schema error occurs while executing the checked SQL.</span></li>
+            <li class="learning-arrow" aria-hidden="true">→</li>
+            <li><strong>One correction</strong><span>The error and failed SQL go back to Ollama once.</span></li>
+            <li class="learning-arrow" aria-hidden="true">→</li>
+            <li><strong>Check again</strong><span>The replacement SQL must pass the same safety checks.</span></li>
+            <li class="learning-arrow" aria-hidden="true">→</li>
+            <li><strong>Result or error</strong><span>Success displays rows; another failure is shown with Retry question.</span></li>
+          </ol>
+        </article>
+      </div>
+    </section>
+
+    <section class="learning-section" id="architecture">
+      <div class="learning-section-heading">
+        <div class="eyebrow">03 · CODE MAP</div>
+        <h2>Classes and functions in the request path</h2>
+        <p>These are the reporting-specific parts of the app, in the order they participate. This feature uses SQLite directly through <code>Microsoft.Data.Sqlite</code>; it does not use Entity Framework or a <code>DbContext</code>.</p>
+      </div>
+      <div class="learning-cards">
+        <article class="learning-card">
+          <h3>Browser UI · <code>wwwroot/app.js</code></h3>
+          <ul class="learning-code-list">
+            <li><code>setWorkspaceMode()</code> switches to reports and loads database choices with <code>GET /api/reports/databases</code>. <code>loadReportSchema()</code> requests the selected database's schema and displays its tables and join paths.</li>
+            <li>The database selector reloads the schema and dataset-specific suggestions. <code>runBusinessReport()</code> checks the question, selected database and model, and busy state, then posts all three values to the report API. Retry keeps the original database and model.</li>
+            <li><code>renderReportResult()</code> builds the summary, row count, results table, and expandable SQL view.</li>
+            <li><code>api()</code> sends HTTP requests and extracts readable problem titles/details from error responses.</li>
+          </ul>
+        </article>
+        <article class="learning-card">
+          <h3>Startup and dependency setup · <code>Program.cs</code></h3>
+          <p>Validates that <code>OLLAMA_BASE_URL</code> is an absolute HTTP/HTTPS URL. When <code>BUSINESS_DB_PATH</code> is absent, it registers the built-in Sales and Access Control demos in <code>BusinessDatabaseCatalog</code>; when set, only that existing SQLite file is registered. It initializes the catalog, registers the report service, and maps the endpoints.</p>
+        </article>
+        <article class="learning-card">
+          <h3>HTTP boundary · <code>BusinessReportEndpoints</code></h3>
+          <p><code>MapBusinessReports()</code> defines <code>GET /api/reports/databases</code>, <code>GET /api/reports/schema?databaseId=…</code>, and <code>POST /api/reports/query</code>. The handlers resolve a requested database and convert invalid IDs and report failures into HTTP problem responses.</p>
+        </article>
+        <article class="learning-card">
+          <h3>Service contract · <code>IBusinessReportService</code></h3>
+          <p>Declares schema lookup by optional database ID and report execution from a request. This lets the endpoint use the reporting service without depending on its implementation.</p>
+        </article>
+        <article class="learning-card">
+          <h3>Database registry · <code>BusinessDatabaseCatalog</code></h3>
+          <p>Lists registered database IDs and display names, chooses the default when an older API caller omits an ID, rejects unknown IDs, and initializes every registered database. Selection is passed per request rather than stored as mutable global state.</p>
+        </article>
+        <article class="learning-card">
+          <h3>Report orchestration · <code>BusinessReportService</code></h3>
+          <ul class="learning-code-list">
+            <li><code>GetSchemaAsync()</code> resolves the selected database and reads table names, columns, and foreign-key relationships so the model has join paths.</li>
+            <li><code>AskAsync()</code> resolves the database from the request, obtains its schema, checks that tables exist, asks for SQL, validates it, executes against that database, and assembles a response identifying the dataset. A SQLite syntax/schema error gets one repair attempt.</li>
+            <li><code>GenerateSqlAsync()</code> sends the question, schema, and applicable business rules to Ollama and parses its JSON summary and SQL.</li>
+            <li><code>ValidateReadOnlySql()</code> enforces the query rules before execution; <code>SkipQuoted()</code> handles quoted SQL text while scanning it.</li>
+            <li><code>ExecuteReportAsync()</code> runs the query and collects its columns and rows; <code>NormalizeSqlValue()</code> converts binary values to Base64 and database nulls to JSON nulls.</li>
+          </ul>
+        </article>
+        <article class="learning-card">
+          <h3>SQLite lifecycle · <code>BusinessDatabase</code></h3>
+          <ul class="learning-code-list">
+            <li><code>InitializeAsync()</code> verifies that a configured custom file exists; for built-in demos it creates/seeds the sales schema or runs the access-control SQL setup script.</li>
+            <li><code>OpenReadOnlyConnectionAsync()</code> opens a read-only connection and enables SQLite query-only mode.</li>
+            <li><code>Id</code>, <code>DisplayName</code>, and <code>BusinessRules</code> identify the database and give the model dataset-specific context; <code>IsDemoData</code> marks sample data.</li>
+          </ul>
+        </article>
+        <article class="learning-card">
+          <h3>Request and response types · <code>BusinessReportModels</code></h3>
+          <p><code>BusinessReportRequest</code> carries the optional database ID, model, and question. <code>BusinessSchemaResponse</code> and <code>BusinessTableSchemaResponse</code> describe the selected database schema. <code>BusinessReportResponse</code> carries the summary, SQL, rows, truncation flag, database identity, and timestamp. <code>ReportDatabaseSelectionException</code> represents an unavailable ID; <code>ReportQueryException</code> represents SQL rejected by the safety check.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="learning-section" id="validation-flow">
+      <div class="learning-section-heading">
+        <div class="eyebrow">04 · VALIDATION AND ERROR FLOW</div>
+        <h2>What is checked before a result is returned</h2>
+        <p>Validation happens at several boundaries. A model-generated query is never executed just because Ollama returned it.</p>
+      </div>
+      <ol class="learning-steps">
+        <li><span>1</span><div><h3>Browser form checks</h3><p>The question is trimmed and must not be empty; a database and model must be selected; another report cannot run while one is already in progress. The textarea also limits input to 2,000 characters.</p></div></li>
+        <li><span>2</span><div><h3>API request checks</h3><p><code>BusinessReportRequest</code> requires a model and question, limits the model name to 200 characters and the question to 2,000, and ASP.NET validation rejects invalid requests.</p></div></li>
+        <li><span>3</span><div><h3>Database and schema checks</h3><p>The catalog rejects unknown database IDs with HTTP 400. At startup, a configured custom database must exist. During a report, the service enumerates non-internal tables, columns, and foreign-key relationships; an empty schema cannot produce a report.</p></div></li>
+        <li><span>4</span><div><h3>Ollama response checks</h3><p>Non-success HTTP responses are surfaced. The response must contain JSON with non-empty string <code>summary</code> and <code>sql</code> properties; empty, malformed, or incomplete output is rejected.</p></div></li>
+        <li><span>5</span><div><h3>SQL safety checks</h3><p>Generated SQL is limited to 10,000 characters, cannot contain comments or multiple statements, and must start with <code>SELECT</code> or <code>WITH</code> containing a <code>SELECT</code>. Known write/unsafe tokens and SQLite/PRAGMA internal names are rejected. Quoted strings are skipped safely, and unterminated quotes are rejected. The model is instructed to use the discovered schema; SQLite checks actual syntax and table/column names during execution.</p></div></li>
+        <li><span>6</span><div><h3>Read-only execution limits</h3><p>Execution uses a read-only, query-only connection with a 10-second command timeout. At most 100 rows are returned; if another row exists, the response marks the results as truncated.</p></div></li>
+        <li><span>7</span><div><h3>One bounded SQL correction</h3><p>A SQLite syntax/schema error (SQLite error code 1) is sent back to Ollama with the failed SQL for one correction attempt. The corrected SQL goes through the same safety checks. There is no unlimited retry loop.</p></div></li>
+      </ol>
+      <div class="learning-safety-grid learning-error-grid">
+        <article class="learning-card">
+          <h3>How failures reach the UI</h3>
+          <p>Rejected SQL becomes HTTP 400; a query SQLite cannot run becomes 422; Ollama/network or invalid-model output becomes 502; an Ollama timeout becomes 504. The browser displays the problem title/detail and offers a retry for the original question.</p>
+        </article>
+        <article class="learning-card">
+          <h3>Where errors are not hidden</h3>
+          <p>If the single repair still fails, the SQLite error is returned instead of a success-shaped empty report. If the SQL is unsafe, it is rejected before SQLite executes it.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="learning-section" id="good-questions">
+      <div class="learning-section-heading">
+        <div class="eyebrow">05 · GETTING USEFUL RESULTS</div>
+        <h2>How to ask clearer questions</h2>
+        <p>Be specific about the metric, grouping, filters, and time period you want.</p>
+      </div>
+      <div class="learning-example">
+        <div>
+          <h3>Less specific</h3>
+          <p>“Show sales.”</p>
+        </div>
+        <div>
+          <h3>More specific</h3>
+          <p>“What was total completed sales by region in 2026? Show the highest-revenue region first.”</p>
+        </div>
+      </div>
+      <ul class="learning-tips">
+        <li>Name the measure: order count, units sold, or revenue.</li>
+        <li>Name the grouping: by region, customer, product, or month.</li>
+        <li>Include filters such as completed orders, a customer name, or a date range.</li>
+        <li>For “top” or “most popular” requests, specify whether you mean revenue, quantity, or number of orders.</li>
+        <li>For details, identify the order or customer explicitly. The model cannot infer which earlier result you mean.</li>
+      </ul>
+      <p class="learning-note">In the sample sales database, revenue is quantity multiplied by unit price, and completed orders count as sales by default. These definitions are not assumed for a custom database.</p>
+    </section>
+
+    <section class="learning-section" id="safety">
+      <div class="learning-section-heading">
+        <div class="eyebrow">06 · DATA AND SAFEGUARDS</div>
+        <h2>What is sent, and what is protected</h2>
+      </div>
+      <div class="learning-safety-grid">
+        <article class="learning-card">
+          <h3>Sent to the configured Ollama server</h3>
+          <p>The report question and database schema (table and column names) are sent to the server configured by <code>OLLAMA_BASE_URL</code>. By default, Ollama runs locally at <code>http://localhost:11434</code>.</p>
+        </article>
+        <article class="learning-card">
+          <h3>Queried locally by the app</h3>
+          <p>The generated SQL runs against SQLite from the app. Query results are not sent back to the model as part of report generation.</p>
+        </article>
+        <article class="learning-card">
+          <h3>Read-only query limits</h3>
+          <p>The app accepts a single read-only <code>SELECT</code> (or a <code>WITH</code> query ending in <code>SELECT</code>), uses a query-only SQLite connection, and caps returned rows at 100.</p>
+        </article>
+        <article class="learning-card">
+          <h3>Review before decisions</h3>
+          <p>Generated SQL and summaries can still be logically wrong even when they run. Inspect the SQL and confirm important results independently.</p>
+        </article>
+      </div>
+      <p class="learning-note">Without <code>BUSINESS_DB_PATH</code>, select either built-in sample database from the report composer. Setting <code>BUSINESS_DB_PATH</code> replaces those choices with the configured, existing SQLite file.</p>
+    </section>
+
+    <section class="learning-section" id="troubleshooting">
+      <div class="learning-section-heading">
+        <div class="eyebrow">07 · TROUBLESHOOTING</div>
+        <h2>If something goes wrong</h2>
+      </div>
+      <dl class="learning-faq">
+        <div><dt>No model is available</dt><dd>Install or pull a model in Ollama, then refresh the app’s model list and select it in the report composer.</dd></div>
+        <div><dt>Ollama is disconnected</dt><dd>Start Ollama and check its configured URL. The app defaults to <code>http://localhost:11434</code>.</dd></div>
+        <div><dt>The query still fails</dt><dd>The app makes one automatic correction attempt for SQLite syntax/schema errors. If it cannot repair the query, read the error, make the question more specific, or use <strong>Retry question</strong>.</dd></div>
+        <div><dt>The result looks incomplete or unexpected</dt><dd>Open <strong>View generated SQL</strong> and verify its joins, filters, grouping, and row limit. Try defining what “popular,” “sales,” or “profit” means for your report.</dd></div>
+      </dl>
+    </section>
+
+    <footer class="learning-footer">
+      <p>Business reports are a local reporting assistant, not a replacement for checking important figures.</p>
+      <a class="learning-back" href="/">Back to Ollama Desk ↑</a>
+    </footer>
+  </main>
+</body>
+</html>

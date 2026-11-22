@@ -3,6 +3,10 @@ using System.ComponentModel.DataAnnotations;
 /// <summary>Asks a local Ollama model to create a read-only business report.</summary>
 public sealed record BusinessReportRequest
 {
+    /// <summary>Gets the selected registered database, or null to use the configured default.</summary>
+    [MaxLength(100)]
+    public string? DatabaseId { get; init; }
+
     /// <summary>Gets the installed Ollama model to use for report generation.</summary>
     [Required, MaxLength(200)]
     public required string Model { get; init; }
@@ -15,10 +19,19 @@ public sealed record BusinessReportRequest
 /// <summary>Describes a table available to the business-reporting assistant.</summary>
 public sealed record BusinessTableSchemaResponse(
     string Name,
-    IReadOnlyList<string> Columns);
+    IReadOnlyList<string> Columns,
+    IReadOnlyList<BusinessForeignKeySchemaResponse> ForeignKeys);
+
+/// <summary>Describes a foreign-key relationship between database tables.</summary>
+public sealed record BusinessForeignKeySchemaResponse(
+    string Column,
+    string ReferencedTable,
+    string? ReferencedColumn);
 
 /// <summary>Describes the local SQLite database available to the reporting assistant.</summary>
 public sealed record BusinessSchemaResponse(
+    string DatabaseId,
+    string DatabaseName,
     bool IsDemoData,
     IReadOnlyList<BusinessTableSchemaResponse> Tables);
 
@@ -29,6 +42,8 @@ public sealed record BusinessReportResponse(
     IReadOnlyList<string> Columns,
     IReadOnlyList<IReadOnlyList<object?>> Rows,
     bool Truncated,
+    string DatabaseId,
+    string DatabaseName,
     bool IsDemoData,
     DateTimeOffset GeneratedAt);
 

@@ -8,17 +8,38 @@ public static class BusinessReportEndpoints
     {
         var reports = endpoints.MapGroup("/api/reports").WithTags("Business reports");
 
-        reports.MapGet("/schema", async Task<Ok<BusinessSchemaResponse>> (
+        reports.MapGet("/databases", (BusinessDatabaseCatalog catalog) =>
+            TypedResults.Ok(catalog.GetOptions()))
+        .WithName("GetBusinessReportDatabases")
+        .WithSummary("List databases available for reports")
+        .Produces<IReadOnlyList<BusinessDatabaseOption>>();
+
+        reports.MapGet("/schema", async Task<Results<
+            Ok<BusinessSchemaResponse>,
+            BadRequest<ProblemDetails>>> (
+            string? databaseId,
             IBusinessReportService service,
             CancellationToken cancellationToken) =>
         {
-            var schema = await service.GetSchemaAsync(cancellationToken);
-            return TypedResults.Ok(schema);
+            try
+            {
+                return TypedResults.Ok(await service.GetSchemaAsync(databaseId, cancellationToken));
+            }
+            catch (ReportDatabaseSelectionException exception)
+            {
+                return TypedResults.BadRequest(new ProblemDetails
+                {
+                    Status = StatusCodes.Status400BadRequest,
+                    Title = "The selected report database is unavailable",
+                    Detail = exception.Message
+                });
+            }
         })
         .WithName("GetBusinessReportSchema")
         .WithSummary("Get the business database schema")
-        .WithDescription("Returns the table and column names available to local read-only report queries.")
-        .Produces<BusinessSchemaResponse>();
+        .WithDescription("Returns the selected database's tables, columns, and foreign-key relationships.")
+        .Produces<BusinessSchemaResponse>()
+        .ProducesProblem(StatusCodes.Status400BadRequest);
 
         reports.MapPost("/query", async Task<Results<
             Ok<BusinessReportResponse>,
@@ -32,6 +53,15 @@ public static class BusinessReportEndpoints
             try
             {
                 return TypedResults.Ok(await service.AskAsync(request, cancellationToken));
+            }
+            catch (ReportDatabaseSelectionException exception)
+            {
+                return TypedResults.BadRequest(new ProblemDetails
+                {
+                    Status = StatusCodes.Status400BadRequest,
+                    Title = "The selected report database is unavailable",
+                    Detail = exception.Message
+                });
             }
             catch (ReportQueryException exception)
             {
@@ -48,6 +78,13 @@ public static class BusinessReportEndpoints
                     title: "Ollama could not generate the report",
                     detail: exception.Message,
                     statusCode: StatusCodes.Status502BadGateway);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                return TypedResults.Problem(
+                    title: "Ollama took too long to prepare the report",
+                    detail: "Try a smaller model or submit the report again.",
+                    statusCode: StatusCodes.Status504GatewayTimeout);
             }
             catch (InvalidDataException exception)
             {
@@ -72,7 +109,8 @@ public static class BusinessReportEndpoints
         .Produces<BusinessReportResponse>()
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
-        .ProducesProblem(StatusCodes.Status502BadGateway);
+        .ProducesProblem(StatusCodes.Status502BadGateway)
+        .ProducesProblem(StatusCodes.Status504GatewayTimeout);
 
         return endpoints;
     }

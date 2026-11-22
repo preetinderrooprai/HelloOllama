@@ -32,7 +32,7 @@ button { color: inherit; }
 .new-chat:hover { background: #292c2c; border-color: #505352; }
 .new-chat span { margin-right: 7px; color: var(--accent); font-size: 17px; vertical-align: -1px; }
 .side-label { margin: 27px 8px 9px; color: #707575; font: 500 9px 'DM Mono', monospace; letter-spacing: 1px; }
-.nav-item { width: 100%; height: 34px; display: flex; align-items: center; gap: 9px; padding: 0 9px; border: 0; border-radius: 5px; background: transparent; color: #aeb1b0; text-align: left; font-size: 12px; cursor: pointer; }
+.nav-item { width: 100%; height: 34px; display: flex; align-items: center; gap: 9px; padding: 0 9px; border: 0; border-radius: 5px; background: transparent; color: #aeb1b0; text-align: left; text-decoration: none; font-size: 12px; cursor: pointer; }
 .nav-item:hover, .nav-item.active { background: #222425; color: #e8e9e6; }
 .nav-icon { width: 15px; color: #a4d367; font-size: 15px; text-align: center; }
 .nav-shortcut { margin-left: auto; color: #676b6a; font: 10px 'DM Mono', monospace; }
@@ -129,6 +129,10 @@ button { color: inherit; }
 .report-sql summary { color: #868e86; font-size: 9px; cursor: pointer; }
 .report-sql pre { max-height: 150px; overflow: auto; padding: 9px; border: 1px solid #2c302e; border-radius: 4px; background: #131515; color: #b8c5ac; font: 9px/1.6 'DM Mono', monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .report-error { color: #e59688; font-size: 10px; line-height: 1.6; }
+.report-error p { margin: 0 0 8px; }
+.report-retry { padding: 5px 8px; border: 1px solid #5a3732; border-radius: 4px; background: #281e1c; color: #e4b7ae; font-size: 9px; cursor: pointer; }
+.report-retry:hover:not(:disabled) { background: #362421; }
+.report-retry:disabled { opacity: .6; cursor: default; }
 .report-composer { flex: 0 0 auto; width: min(100%, 800px); margin: 0 auto; padding: 10px 12px 8px; border: 1px solid #373a38; border-radius: 8px; background: #1b1d1e; }
 .report-composer:focus-within { border-color: #65744e; }
 .report-composer textarea { display: block; width: 100%; min-height: 45px; max-height: 120px; resize: vertical; border: 0; outline: 0; background: transparent; color: #e7e9e4; font-size: 11px; line-height: 1.6; }
@@ -249,6 +253,79 @@ button { color: inherit; }
 .command-safety { margin: 13px 0 0; color: #757c76; font-size: 9px; line-height: 1.5; }
 .about-facts { display: flex; flex-direction: column; gap: 7px; padding: 11px; border: 1px solid #303332; border-radius: 5px; color: #b9c9ad; font-size: 10px; }
 .about-facts span::before { margin-right: 7px; color: var(--accent); content: "✓"; }
+
+.learning-page { min-width: 320px; background: radial-gradient(ellipse at 50% 0, #1a1e18, var(--bg) 520px); }
+.learning-topbar { display: flex; justify-content: space-between; align-items: center; min-height: 62px; padding: 0 max(20px, calc((100vw - 1040px) / 2)); border-bottom: 1px solid #252728; background: #141516cc; }
+.learning-topbar .brand { margin: 0; }
+.learning-back { color: #b6d28f; font-size: 11px; text-decoration: none; }
+.learning-back:hover { color: var(--accent); }
+.learning-main { width: min(calc(100% - 32px), 960px); margin: 0 auto; }
+.learning-hero { padding: 58px 0 38px; }
+.learning-hero .eyebrow, .learning-section-heading .eyebrow { color: #a4c67d; }
+.learning-hero h1 { margin: 10px 0; color: #e8e9e5; font: 600 clamp(28px, 5vw, 42px) 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: -1.5px; }
+.learning-hero > p { max-width: 650px; margin: 0; color: #a0a69f; font-size: 13px; line-height: 1.7; }
+.learning-cta { display: inline-flex; gap: 9px; align-items: center; margin-top: 20px; padding: 9px 12px; border: 1px solid #52633d; border-radius: 5px; background: #20261b; color: #d7edbd; font-size: 10px; text-decoration: none; }
+.learning-cta:hover { background: #2a3421; }
+.learning-toc { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 0; border-top: 1px solid #292c2a; border-bottom: 1px solid #292c2a; }
+.learning-toc a { padding: 6px 9px; border: 1px solid #303432; border-radius: 4px; color: #aeb6a9; font-size: 9px; text-decoration: none; }
+.learning-toc a:hover { border-color: #687850; color: #e3e9dd; }
+.learning-section { padding: 34px 0 10px; scroll-margin-top: 20px; }
+.learning-section-heading { margin-bottom: 16px; }
+.learning-section-heading h2 { margin: 6px 0; color: #e1e4df; font: 600 20px 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: -.5px; }
+.learning-section-heading > p { margin: 0; color: #8e958e; font-size: 11px; line-height: 1.7; }
+.learning-cards, .learning-safety-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.learning-card { min-width: 0; padding: 14px; border: 1px solid #2d3230; border-radius: 7px; background: #171a19cc; }
+.learning-card-number { display: inline-grid; place-items: center; width: 20px; height: 20px; margin-bottom: 8px; border-radius: 5px; background: #293222; color: #c4f27d; font: 9px 'DM Mono', monospace; }
+.learning-card h3, .learning-steps h3, .learning-example h3 { margin: 0 0 6px; color: #dce1d8; font: 600 12px 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.learning-card p, .learning-steps p { margin: 0; color: #969d96; font-size: 10px; line-height: 1.7; }
+.learning-code-list { display: grid; gap: 7px; margin: 9px 0 0; padding-left: 16px; color: #969d96; }
+.learning-code-list li { font-size: 10px; line-height: 1.7; }
+.learning-code-list li::marker { color: #a4c67d; }
+.learning-code-list code { color: #d0dda9; font: 9px 'DM Mono', monospace; }
+.learning-note { margin: 13px 0 0; padding: 11px 13px; border-left: 2px solid #8eae68; background: #1a1e18; color: #a3ad9a; font-size: 10px; line-height: 1.7; }
+.learning-note strong { color: #cde4b1; }
+.learning-steps { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
+.learning-steps li { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border: 1px solid #2b302d; border-radius: 6px; background: #171918; }
+.learning-steps li > span { flex: 0 0 22px; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #2a3223; color: var(--accent); font: 10px 'DM Mono', monospace; }
+.learning-steps li > div { min-width: 0; }
+.learning-steps h3 { margin-top: 2px; }
+.learning-workflows { display: grid; gap: 11px; margin-top: 14px; }
+.learning-workflow-card { padding: 13px; border: 1px solid #303432; border-radius: 6px; background: #141716; }
+.learning-workflow-card h3 { margin: 0 0 11px; color: #dce1d8; font: 600 11px 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.learning-arrow-flow { display: flex; align-items: stretch; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.learning-arrow-flow li:not(.learning-arrow) { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 5px; padding: 10px; border: 1px solid #303a2b; border-radius: 5px; background: #1a1f18; }
+.learning-arrow-flow strong { color: #cde4b1; font: 9px 'DM Mono', monospace; }
+.learning-arrow-flow span { color: #929b8e; font-size: 9px; line-height: 1.6; }
+.learning-arrow-flow code { color: #d0dda9; font: 8px 'DM Mono', monospace; }
+.learning-arrow-flow .learning-arrow { flex: 0 0 13px; display: grid; place-items: center; color: #91a96d; font-size: 14px; }
+.learning-example { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.learning-example > div { padding: 13px; border: 1px solid #303432; border-radius: 6px; background: #171918; }
+.learning-example > div:last-child { border-color: #48553c; background: #1b2018; }
+.learning-example p { margin: 0; color: #9da69a; font-size: 10px; line-height: 1.7; }
+.learning-tips { display: grid; gap: 8px; margin: 13px 0 0; padding-left: 19px; color: #a2aaa0; font-size: 10px; line-height: 1.7; }
+.learning-tips li::marker { color: #a4c67d; }
+.learning-card code, .learning-steps code, .learning-faq code { color: #d0dda9; font: 9px 'DM Mono', monospace; }
+.learning-faq { display: grid; gap: 8px; margin: 0; }
+.learning-faq > div { padding: 12px 13px; border: 1px solid #2d3230; border-radius: 6px; background: #171918; }
+.learning-faq dt { margin-bottom: 5px; color: #dce1d8; font: 600 11px 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.learning-faq dd { margin: 0; color: #969d96; font-size: 10px; line-height: 1.7; }
+.learning-error-grid { margin-top: 10px; }
+.learning-footer { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-top: 32px; padding: 16px 0 28px; border-top: 1px solid #292c2a; }
+.learning-footer p { margin: 0; color: #777f77; font-size: 9px; line-height: 1.6; }
+
+@media (max-width: 640px) {
+  .learning-topbar { min-height: 56px; padding: 0 16px; }
+  .learning-topbar .brand { font-size: 15px; }
+  .learning-topbar .brand > span:not(.brand-mark) { display: inline; }
+  .learning-main { width: min(calc(100% - 28px), 960px); }
+  .learning-hero { padding: 40px 0 28px; }
+  .learning-cards, .learning-safety-grid, .learning-example { grid-template-columns: 1fr; }
+  .learning-arrow-flow { flex-direction: column; gap: 4px; }
+  .learning-arrow-flow li:not(.learning-arrow) { flex-basis: auto; }
+  .learning-arrow-flow .learning-arrow { flex-basis: 12px; font-size: 0; }
+  .learning-arrow-flow .learning-arrow::after { content: "↓"; font-size: 14px; }
+  .learning-footer { align-items: flex-start; flex-direction: column; }
+}
 [hidden] { display: none !important; }
 
 @media (min-width: 1450px) {

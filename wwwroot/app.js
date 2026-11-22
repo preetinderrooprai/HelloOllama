@@ -1,11 +1,14 @@
 const $ = (selector) => document.querySelector(selector);
-const state = { models: [], messages: [], busy: false, reportBusy: false, connected: false };
+const state = { models: [], messages: [], busy: false, reportBusy: false, connected: false, reportDatabasesLoaded: false };
 const api = async (path, options = {}) => {
   const response = await fetch(path, options);
   if (!response.ok) {
     const text = await response.text();
     let message = text;
-    try { message = JSON.parse(text).error || text; } catch { /* Keep the original response text. */ }
+    try {
+      const problem = JSON.parse(text);
+      message = [problem.title, problem.detail || problem.error].filter(Boolean).join(': ') || text;
+    } catch { /* Keep the original response text. */ }
     throw new Error(message || `Request failed (${response.status})`);
   }
   return response;
@@ -104,7 +107,8 @@ function renderModels() {
     ? previousReportModel
     : select.value;
   $('#sendButton').disabled = !select.value || state.busy;
-  $('#runReportButton').disabled = !reportSelect.value || state.reportBusy;
+  $('#runReportButton').disabled = !$('#reportQuestion').value.trim() ||
+    !reportSelect.value || !$('#reportDatabase').value || state.reportBusy;
 }
 
 async function loadRunningModels() {
@@ -266,27 +270,111 @@ function setWorkspaceMode(mode) {
   $('#chatNav').classList.toggle('active', !showingReports);
   $('#reportsNav').classList.toggle('active', showingReports);
   $('#pageTitle').textContent = showingReports ? 'Business reports' : 'Chat';
-  if (showingReports) loadReportSchema();
+  if (showingReports) {
+    if (state.reportDatabasesLoaded) void loadReportSchema();
+    else void loadReportDatabases();
+  }
+}
+
+async function loadReportDatabases() {
+  const select = $('#reportDatabase');
+  select.disabled = true;
+  try {
+    const databases = await (await api('/api/reports/databases')).json();
+    const previous = select.value;
+    select.replaceChildren();
+    for (const database of databases) {
+      select.add(new Option(database.name, database.id));
+    }
+
+    if (!databases.length) {
+      select.add(new Option('No databases available', ''));
+      $('#reportDatabaseStatus').textContent = 'No report databases available';
+      $('#reportSchema').textContent = 'No report databases are registered.';
+      state.reportDatabasesLoaded = true;
+      return;
+    }
+
+    select.value = databases.some((database) => database.id === previous)
+      ? previous
+      : databases[0].id;
+    select.disabled = databases.length < 2;
+    state.reportDatabasesLoaded = true;
+    await loadReportSchema();
+  } catch (error) {
+    select.replaceChildren(new Option('Database list unavailable', ''));
+    $('#reportDatabaseStatus').textContent = 'Database list unavailable';
+    $('#reportSchema').textContent = error.message;
+    state.reportDatabasesLoaded = false;
+  }
 }
 
 async function loadReportSchema() {
+  const databaseId = $('#reportDatabase').value;
+  if (!databaseId) return;
+
   try {
-    const schema = await (await api('/api/reports/schema')).json();
-    $('#reportDatabaseStatus').textContent = schema.isDemoData
-      ? 'Sample sales database · SQLite · Read only'
-      : 'Connected SQLite database · Read only';
+    const schema = await (await api(`/api/reports/schema?databaseId=${encodeURIComponent(databaseId)}`)).json();
+    if (databaseId !== $('#reportDatabase').value) return;
+    $('#reportDatabaseStatus').textContent =
+      `${schema.databaseName} · SQLite · Read only${schema.isDemoData ? ' · sample data' : ''}`;
+    $('#reportQuestion').placeholder = schema.databaseId === 'access-control-demo'
+      ? 'Ask about cardholders, sites, swipes, doors, readers, or attendance…'
+      : schema.databaseId === 'sales-demo'
+        ? 'Ask a question about sales, customers, products…'
+        : 'Ask a question about the available database tables…';
     const container = $('#reportSchema');
     container.replaceChildren();
     for (const table of schema.tables || []) {
       const line = document.createElement('div');
-      line.textContent = `${table.name} (${(table.columns || []).join(', ')})`;
+      const relationships = (table.foreignKeys || []).map((foreignKey) =>
+        `${foreignKey.column} -> ${foreignKey.referencedTable}.${foreignKey.referencedColumn || 'primary key'}`);
+      line.textContent = `${table.name} (${(table.columns || []).join(', ')})${relationships.length ? ` · joins: ${relationships.join(', ')}` : ''}`;
       container.append(line);
     }
     if (!schema.tables?.length) container.textContent = 'No tables found in this database.';
+    updateReportWelcome(schema);
   } catch (error) {
+    if (databaseId !== $('#reportDatabase').value) return;
     $('#reportDatabaseStatus').textContent = 'Database unavailable';
     $('#reportSchema').textContent = error.message;
   }
+}
+
+function updateReportWelcome(schema) {
+  const welcome = $('#reportWelcome');
+  if (!welcome) return;
+
+  const isSalesDemo = schema.databaseId === 'sales-demo';
+  const isAccessControlDemo = schema.databaseId === 'access-control-demo';
+  const examples = isSalesDemo
+    ? [
+      ['Completed sales by region', 'What was total completed sales by region?'],
+      ['Monthly sales in 2026', 'Show monthly completed sales for 2026.'],
+      ['Top products by revenue', 'Which products generated the most revenue?']
+    ]
+    : isAccessControlDemo
+      ? [
+        ['Denied swipes by site', 'Count denied swipe attempts by site. Join swipes.reader_id to readers.reader_id, readers.door_id to doors.door_id, and doors.site_id to sites.site_id. Do not join cards or attendance_records. Filter access_result = DENIED and swipe_time_utc from 2026-11-16 inclusive to 2026-11-19 exclusive. Return site_name and the count, highest count first.'],
+        ['Daily attendance', 'For 2026-11-16, list each cardholder name, site name, attendance status, first entry time, last exit time, and minutes on site. Join attendance_records.cardholder_id to cardholders.cardholder_id and attendance_records.site_id to sites.site_id.'],
+        ['Door alerts', 'List door activities with severity ALARM or WARNING from 2026-11-16 through 2026-11-18. Include site, door, event time, event type, severity, and details. Join door_activities.door_id to doors.door_id and doors.site_id to sites.site_id.']
+      ]
+      : [];
+
+  const description = welcome.querySelector('p');
+  description.textContent = isSalesDemo
+    ? 'This starter database contains sample sales, customers, regions, products, and orders.'
+    : isAccessControlDemo
+      ? 'This access-control sample contains fictional cardholders, sites, doors, readers, swipes, activities, and attendance.'
+      : 'Ask a question about the tables shown in Available tables and columns.';
+
+  welcome.querySelectorAll('.report-suggestion').forEach((button, index) => {
+    const example = examples[index];
+    button.hidden = !example;
+    if (!example) return;
+    button.textContent = example[0];
+    button.dataset.reportQuestion = example[1];
+  });
 }
 
 function renderReportResult(container, report) {
@@ -297,7 +385,7 @@ function renderReportResult(container, report) {
   const meta = document.createElement('p');
   meta.className = 'report-meta';
   const rowCount = report.rows?.length || 0;
-  meta.textContent = `${rowCount} row${rowCount === 1 ? '' : 's'}${report.truncated ? ` shown (limited to 100)` : ''} · ${report.isDemoData ? 'sample data' : 'your database'} · ${new Date(report.generatedAt).toLocaleTimeString()}`;
+  meta.textContent = `${rowCount} row${rowCount === 1 ? '' : 's'}${report.truncated ? ` shown (limited to 100)` : ''} · ${report.databaseName}${report.isDemoData ? ' · sample data' : ''} · ${new Date(report.generatedAt).toLocaleTimeString()}`;
   container.append(summary, meta);
 
   if (report.columns?.length) {
@@ -340,12 +428,17 @@ function renderReportResult(container, report) {
   container.append(sqlDetails);
 }
 
-async function runBusinessReport(question) {
+async function runBusinessReport(question, retryModel = null, retryDatabaseId = null) {
   const prompt = question.trim();
-  const model = $('#reportModel').value;
+  const model = retryModel || $('#reportModel').value;
+  const databaseId = retryDatabaseId || $('#reportDatabase').value;
   if (!prompt || state.reportBusy) return;
   if (!model) {
     toast('Select an Ollama model before running a report.', true);
+    return;
+  }
+  if (!databaseId) {
+    toast('Select a database before running a report.', true);
     return;
   }
 
@@ -371,15 +464,27 @@ async function runBusinessReport(question) {
     const report = await (await api('/api/reports/query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, question: prompt })
+      body: JSON.stringify({ databaseId, model, question: prompt })
     })).json();
     renderReportResult(response, report);
   } catch (error) {
     response.className = 'report-error';
-    response.textContent = error.message;
+    const message = document.createElement('p');
+    message.textContent = error.message;
+    const retryButton = document.createElement('button');
+    retryButton.className = 'report-retry';
+    retryButton.type = 'button';
+    retryButton.textContent = 'Retry question';
+    retryButton.addEventListener('click', () => {
+      if (state.reportBusy) return;
+      retryButton.disabled = true;
+      void runBusinessReport(prompt, model, databaseId);
+    });
+    response.replaceChildren(message, retryButton);
   } finally {
     state.reportBusy = false;
-    $('#runReportButton').disabled = !$('#reportModel').value;
+    $('#runReportButton').disabled = !$('#reportQuestion').value.trim() ||
+      !$('#reportModel').value || !$('#reportDatabase').value;
     $('#reportFeed').scrollTop = $('#reportFeed').scrollHeight;
     $('#reportQuestion').focus();
   }
@@ -607,12 +712,19 @@ function setup() {
   $('#chatModel').addEventListener('change', () => { $('#sendButton').disabled = !$('#chatModel').value || state.busy; });
   $('#chatModel').addEventListener('change', () => {
     $('#reportModel').value = $('#chatModel').value;
-    $('#runReportButton').disabled = !$('#reportModel').value || state.reportBusy;
+    $('#runReportButton').disabled = !$('#reportQuestion').value.trim() ||
+      !$('#reportModel').value || !$('#reportDatabase').value || state.reportBusy;
   });
   $('#reportModel').addEventListener('change', () => {
     $('#chatModel').value = $('#reportModel').value;
     $('#sendButton').disabled = !$('#chatModel').value || state.busy;
-    $('#runReportButton').disabled = !$('#reportModel').value || state.reportBusy;
+    $('#runReportButton').disabled = !$('#reportQuestion').value.trim() ||
+      !$('#reportModel').value || !$('#reportDatabase').value || state.reportBusy;
+  });
+  $('#reportDatabase').addEventListener('change', () => {
+    $('#runReportButton').disabled = !$('#reportQuestion').value.trim() ||
+      !$('#reportModel').value || !$('#reportDatabase').value || state.reportBusy;
+    void loadReportSchema();
   });
   $('#chatNav').addEventListener('click', () => setWorkspaceMode('chat'));
   $('#reportsNav').addEventListener('click', () => setWorkspaceMode('reports'));
@@ -622,7 +734,7 @@ function setup() {
   });
   $('#reportQuestion').addEventListener('input', () => {
     $('#runReportButton').disabled = !$('#reportQuestion').value.trim() ||
-      !$('#reportModel').value || state.reportBusy;
+      !$('#reportModel').value || !$('#reportDatabase').value || state.reportBusy;
   });
   $('#reportQuestion').addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {

@@ -66,11 +66,22 @@ public sealed class BusinessDatabase
     private readonly string _path;
     private readonly string _readOnlyConnectionString;
     private readonly bool _isDemoData;
+    private readonly string? _setupScriptPath;
 
-    public BusinessDatabase(string path, bool isDemoData)
+    public BusinessDatabase(
+        string id,
+        string displayName,
+        string path,
+        bool isDemoData,
+        string businessRules,
+        string? setupScriptPath = null)
     {
+        Id = id;
+        DisplayName = displayName;
         _path = Path.GetFullPath(path);
         _isDemoData = isDemoData;
+        BusinessRules = businessRules;
+        _setupScriptPath = setupScriptPath is null ? null : Path.GetFullPath(setupScriptPath);
         _readOnlyConnectionString = new SqliteConnectionStringBuilder
         {
             DataSource = _path,
@@ -79,7 +90,10 @@ public sealed class BusinessDatabase
         }.ToString();
     }
 
+    public string Id { get; }
+    public string DisplayName { get; }
     public bool IsDemoData => _isDemoData;
+    public string BusinessRules { get; }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
@@ -101,6 +115,15 @@ public sealed class BusinessDatabase
         await connection.OpenAsync(cancellationToken);
         if (!_isDemoData)
         {
+            return;
+        }
+
+        if (_setupScriptPath is not null)
+        {
+            var setupScript = await File.ReadAllTextAsync(_setupScriptPath, cancellationToken);
+            await using var setup = connection.CreateCommand();
+            setup.CommandText = setupScript;
+            await setup.ExecuteNonQueryAsync(cancellationToken);
             return;
         }
 

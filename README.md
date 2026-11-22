@@ -29,15 +29,27 @@ The app connects directly to Ollama's HTTP API. The browser keeps the current ch
 
 Select **Business reports** in the sidebar. Ask a question in natural language and choose an installed Ollama model. The model generates a SQLite report query; the app validates and runs it against a read-only database connection, then displays the result table and SQL.
 
-On first run, the app creates `data/business-demo.sqlite` with sample sales data and tables for regions, customers, products, orders, and order items. It does not overwrite existing sample rows. This is demo data for learning; it is not your real business data.
+If a generated query has a SQLite syntax or schema error, the app asks the model once to correct it. If the retry also fails, the error is shown with a **Retry question** action that resubmits the original question.
 
-To use a different local SQLite file, set `BUSINESS_DB_PATH` to its absolute path before starting the app. The configured database must already exist and is opened read-only; the app does not create or alter its schema. Ollama receives the question and schema locally to produce SQL. Query results are limited to 100 rows, and write operations are rejected.
+Select **Learn reports** in the sidebar to open the in-app guide explaining the report controls, request flow, query safeguards, and troubleshooting.
+
+Without `BUSINESS_DB_PATH`, the report composer offers two built-in databases: **Sales demo** and **Access control demo**. On first run, the app creates `data/business-demo.sqlite` with sample sales data and `data/access-control-demo.sqlite` with synthetic cardholder, site, door, reader, swipe, activity, and attendance data. The seed scripts do not overwrite existing rows. These databases are for learning; they are not real business data.
+
+To use a different local SQLite file, set `BUSINESS_DB_PATH` to its absolute path before starting the app. The configured database must already exist and is opened read-only; the app does not create or alter its schema. The question and table/column names are sent to the configured Ollama server to produce SQL; by default Ollama runs locally at `http://localhost:11434`. Query results are limited to 100 rows, and write operations are rejected.
 
 ```sh
 BUSINESS_DB_PATH=/absolute/path/to/business.sqlite dotnet run
 ```
 
-The report API is documented at `/openapi/v1.json` in Development. [`BusinessReports.http`](./BusinessReports.http) contains example schema and report requests.
+The database selector applies to each report request and schema view; switching it does not require restarting the app. The report API is documented at `/openapi/v1.json` in Development. [`BusinessReports.http`](./BusinessReports.http) contains example schema and report requests. The schema supplied to the model includes table columns and declared foreign-key join paths.
+
+### Test with access-control data
+
+The repository includes a synthetic access-control database script with cardholders, cards, sites, doors, readers, swipes, door activities, cardholder activities, and daily attendance records. It contains fictional data only.
+
+Choose **Access control demo** in the report composer to test it from the UI. To exercise the API examples directly, start the app without `BUSINESS_DB_PATH`, then use [`AccessControlReports.http`](./AccessControlReports.http), which selects the built-in access-control database by ID.
+
+The denied-swipe example should return **North Campus: 2**; the attendance example for `2026-11-16` should return four cardholders. When `BUSINESS_DB_PATH` is set, the built-in selector is replaced by that single configured database; the configured file must already exist and is not modified.
 
 CPU and memory monitoring is supported on macOS and Linux. Expand **Top memory users** to see processes grouped by name and their resident memory, with a reminder when overall memory use is high. The app only reports and suggests; it does not stop processes. Ollama reports active model memory allocation (including VRAM where available); GPU utilization is hardware- and driver-specific and is not reported by Ollama on all systems.
 

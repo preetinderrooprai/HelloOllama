@@ -1,5 +1,5 @@
 @baseUrl = http://localhost:5229
-@model = qwen3.5:9b
+@model = qwen3.5:4b
 
 ### Inspect tables and columns available to reports
 GET {{baseUrl}}/api/reports/schema

@@ -12,9 +12,32 @@ if (!Uri.TryCreate(ollamaUrl, UriKind.Absolute, out var ollamaUri) ||
 }
 
 var configuredDatabasePath = Environment.GetEnvironmentVariable("BUSINESS_DB_PATH");
-var businessDatabase = new BusinessDatabase(
-    configuredDatabasePath ?? Path.Combine(builder.Environment.ContentRootPath, "data", "business-demo.sqlite"),
-    isDemoData: configuredDatabasePath is null);
+var databaseCatalog = configuredDatabasePath is null
+    ? new BusinessDatabaseCatalog(
+    [
+        new BusinessDatabase(
+            "sales-demo",
+            "Sales demo",
+            Path.Combine(builder.Environment.ContentRootPath, "data", "business-demo.sqlite"),
+            isDemoData: true,
+            businessRules: "For this sample sales database, revenue is order_items.quantity multiplied by order_items.unit_price. Unless specified otherwise, only completed orders count as sales. Dates are stored as ISO YYYY-MM-DD text."),
+        new BusinessDatabase(
+            "access-control-demo",
+            "Access control demo",
+            Path.Combine(builder.Environment.ContentRootPath, "data", "access-control-demo.sqlite"),
+            isDemoData: true,
+            businessRules: "This is synthetic physical access-control data. Join swipes to sites through readers and doors using the declared foreign keys. Join swipes to cardholders through cards. Attendance is precomputed in attendance_records; timestamps ending in Z are UTC.",
+            setupScriptPath: Path.Combine(builder.Environment.ContentRootPath, "data", "access-control-demo.sql"))
+    ], "sales-demo")
+    : new BusinessDatabaseCatalog(
+    [
+        new BusinessDatabase(
+            "configured",
+            "Configured SQLite database",
+            configuredDatabasePath,
+            isDemoData: false,
+            businessRules: "No business definitions are provided. Do not assume formulas or status meanings beyond the user's question.")
+    ], "configured");
 
 builder.Services.AddOpenApi();
 builder.Services.AddValidation();
@@ -25,7 +48,7 @@ builder.Services.AddSingleton(new HttpClient
     Timeout = TimeSpan.FromSeconds(30)
 });
 builder.Services.AddSingleton<MachineMetrics>();
-builder.Services.AddSingleton(businessDatabase);
+builder.Services.AddSingleton(databaseCatalog);
 builder.Services.AddHttpClient<IBusinessReportService, BusinessReportService>(client =>
 {
     client.BaseAddress = ollamaUri;
@@ -42,7 +65,7 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-await businessDatabase.InitializeAsync(CancellationToken.None);
+await databaseCatalog.InitializeAsync(CancellationToken.None);
 
 app.MapGet("/api/health", async (HttpClient ollama, CancellationToken cancellationToken) =>
 {

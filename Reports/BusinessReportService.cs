@@ -4,7 +4,7 @@ using Microsoft.Data.Sqlite;
 
 public sealed class BusinessReportService(
     HttpClient ollama,
-    BusinessDatabase database) : IBusinessReportService
+    BusinessDatabaseCatalog databases) : IBusinessReportService
 {
     private const int MaxResultRows = 100;
     private static readonly HashSet<string> ForbiddenTokens = new(StringComparer.OrdinalIgnoreCase)
@@ -15,7 +15,14 @@ public sealed class BusinessReportService(
         "WRITEFILE"
     };
 
-    public async Task<BusinessSchemaResponse> GetSchemaAsync(CancellationToken cancellationToken)
+    public Task<BusinessSchemaResponse> GetSchemaAsync(
+        string? databaseId,
+        CancellationToken cancellationToken) =>
+        GetSchemaAsync(databases.GetDatabase(databaseId), cancellationToken);
+
+    private static async Task<BusinessSchemaResponse> GetSchemaAsync(
+        BusinessDatabase database,
+        CancellationToken cancellationToken)
     {
         await using var connection = await database.OpenReadOnlyConnectionAsync(cancellationToken);
         var tables = new List<BusinessTableSchemaResponse>();
@@ -38,73 +45,122 @@ public sealed class BusinessReportService(
 
         foreach (var tableName in tableNames)
         {
-            await using var columnCommand = connection.CreateCommand();
             var escapedName = tableName.Replace("\"", "\"\"");
-            columnCommand.CommandText = $"PRAGMA table_info(\"{escapedName}\");";
-            await using var columnReader = await columnCommand.ExecuteReaderAsync(cancellationToken);
             var columns = new List<string>();
-            while (await columnReader.ReadAsync(cancellationToken))
+            await using (var columnCommand = connection.CreateCommand())
             {
-                columns.Add(columnReader.GetString(1));
+                columnCommand.CommandText = $"PRAGMA table_info(\"{escapedName}\");";
+                await using var columnReader = await columnCommand.ExecuteReaderAsync(cancellationToken);
+                while (await columnReader.ReadAsync(cancellationToken))
+                {
+                    columns.Add(columnReader.GetString(1));
+                }
             }
 
-            tables.Add(new BusinessTableSchemaResponse(tableName, columns));
+            var foreignKeys = new List<BusinessForeignKeySchemaResponse>();
+            await using (var foreignKeyCommand = connection.CreateCommand())
+            {
+                foreignKeyCommand.CommandText = $"PRAGMA foreign_key_list(\"{escapedName}\");";
+                await using var foreignKeyReader = await foreignKeyCommand.ExecuteReaderAsync(cancellationToken);
+                while (await foreignKeyReader.ReadAsync(cancellationToken))
+                {
+                    foreignKeys.Add(new BusinessForeignKeySchemaResponse(
+                        foreignKeyReader.GetString(3),
+                        foreignKeyReader.GetString(2),
+                        foreignKeyReader.IsDBNull(4) ? null : foreignKeyReader.GetString(4)));
+                }
+            }
+
+            tables.Add(new BusinessTableSchemaResponse(tableName, columns, foreignKeys));
         }
 
-        return new BusinessSchemaResponse(database.IsDemoData, tables);
+        return new BusinessSchemaResponse(
+            database.Id,
+            database.DisplayName,
+            database.IsDemoData,
+            tables);
     }
 
     public async Task<BusinessReportResponse> AskAsync(
         BusinessReportRequest request,
         CancellationToken cancellationToken)
     {
-        var schema = await GetSchemaAsync(cancellationToken);
+        var database = databases.GetDatabase(request.DatabaseId);
+        var schema = await GetSchemaAsync(database, cancellationToken);
         if (schema.Tables.Count == 0)
         {
             throw new InvalidOperationException("The business database has no queryable tables.");
         }
 
-        var schemaDescription = string.Join(
-            "\n",
-            schema.Tables.Select(table => $"{table.Name}({string.Join(", ", table.Columns)})"));
+        var schemaDescription = string.Join("\n", schema.Tables.Select(DescribeTableSchema));
         var generated = await GenerateSqlAsync(
+            database,
             request.Model,
             request.Question,
             schemaDescription,
             cancellationToken);
-        var sql = ValidateReadOnlySql(generated.Sql);
-        var (columns, rows, truncated) = await ExecuteReportAsync(sql, cancellationToken);
 
-        return new BusinessReportResponse(
-            generated.Summary,
-            sql,
-            columns,
-            rows,
-            truncated,
-            database.IsDemoData,
-            DateTimeOffset.UtcNow);
+        for (var attempt = 0; ; attempt++)
+        {
+            var sql = ValidateReadOnlySql(generated.Sql);
+            try
+            {
+                var (columns, rows, truncated) = await ExecuteReportAsync(database, sql, cancellationToken);
+                return new BusinessReportResponse(
+                    generated.Summary,
+                    sql,
+                    columns,
+                    rows,
+                    truncated,
+                    database.Id,
+                    database.DisplayName,
+                    database.IsDemoData,
+                    DateTimeOffset.UtcNow);
+            }
+            catch (SqliteException exception) when (attempt == 0 && exception.SqliteErrorCode == 1)
+            {
+                var correction = $"""
+                    The previous SQL failed to execute with this SQLite error: {exception.Message}
+                    Previous SQL: {generated.Sql}
+                    Correct the query using only the listed schema. Return a different, valid read-only SELECT query.
+                    """;
+                generated = await GenerateSqlAsync(
+                    database,
+                    request.Model,
+                    request.Question,
+                    schemaDescription,
+                    cancellationToken,
+                    correction);
+            }
+        }
     }
 
     private async Task<(string Summary, string Sql)> GenerateSqlAsync(
+        BusinessDatabase database,
         string model,
         string question,
         string schema,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? correction = null)
     {
         var systemPrompt = """
             You write read-only SQLite business reports.
             Return one JSON object with exactly these string properties: "summary" and "sql".
             The summary is a short description of the report.
             The sql must be exactly one SELECT query (a WITH clause ending in SELECT is allowed).
-            Use only the listed tables and columns. Do not write comments or a semicolon.
+            Use only the listed tables and columns. Follow declared foreign-key relationships for joins, joining each foreign-key column directly to its referenced column.
+            Do not add tables that are not needed to answer the question or infer relationships that are not listed.
+            Do not write comments or a semicolon.
             Never use PRAGMA, ATTACH, extension functions, filesystem functions, or any data-changing operation.
             Include a LIMIT 100 for detail rows. For aggregate reports, keep the result concise.
-            In this sample sales schema, revenue is order_items.quantity multiplied by order_items.unit_price.
-            Unless the question specifies otherwise, treat completed orders as sales and exclude pending or cancelled orders.
-            Dates are stored as ISO YYYY-MM-DD text.
             If the question cannot be answered from the schema, return a SELECT that returns no rows and explain the limitation in summary.
             """;
-        var userPrompt = $"Available SQLite schema:\n{schema}\n\nBusiness question:\n{question}";
+        var userPrompt = $"Available SQLite schema:\n{schema}\n\nBusiness rules:\n{database.BusinessRules}\n\nBusiness question:\n{question}";
+        if (correction is not null)
+        {
+            userPrompt += $"\n\nQuery correction needed:\n{correction}";
+        }
+
         using var response = await ollama.PostAsJsonAsync(
             "/api/chat",
             new
@@ -117,7 +173,8 @@ public sealed class BusinessReportService(
                     new { role = "system", content = systemPrompt },
                     new { role = "user", content = userPrompt }
                 },
-                options = new { temperature = 0.1 }
+                think = false,
+                options = new { temperature = 0.1, num_predict = 256 }
             },
             cancellationToken);
 
@@ -159,7 +216,7 @@ public sealed class BusinessReportService(
     }
 
     private async Task<(IReadOnlyList<string> Columns, IReadOnlyList<IReadOnlyList<object?>> Rows, bool Truncated)>
-        ExecuteReportAsync(string sql, CancellationToken cancellationToken)
+        ExecuteReportAsync(BusinessDatabase database, string sql, CancellationToken cancellationToken)
     {
         await using var connection = await database.OpenReadOnlyConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -198,6 +255,22 @@ public sealed class BusinessReportService(
         DBNull => null,
         _ => value
     };
+
+    private static string DescribeTableSchema(BusinessTableSchemaResponse table)
+    {
+        var description = $"{table.Name}({string.Join(", ", table.Columns)})";
+        if (table.ForeignKeys.Count == 0)
+        {
+            return description;
+        }
+
+        var relationships = table.ForeignKeys.Select(foreignKey =>
+        {
+            var referencedColumn = foreignKey.ReferencedColumn ?? "primary key";
+            return $"{table.Name}.{foreignKey.Column} -> {foreignKey.ReferencedTable}.{referencedColumn}";
+        });
+        return $"{description}\n  Foreign keys: {string.Join(", ", relationships)}";
+    }
 
     private static string ValidateReadOnlySql(string sql)
     {
