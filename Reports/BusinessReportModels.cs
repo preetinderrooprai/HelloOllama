@@ -28,12 +28,14 @@ public sealed record BusinessForeignKeySchemaResponse(
     string ReferencedTable,
     string? ReferencedColumn);
 
-/// <summary>Describes the local SQLite database available to the reporting assistant.</summary>
+/// <summary>Describes a selected read-only database available to the reporting assistant.</summary>
 public sealed record BusinessSchemaResponse(
     string DatabaseId,
     string DatabaseName,
+    string ProviderName,
     bool IsDemoData,
-    IReadOnlyList<BusinessTableSchemaResponse> Tables);
+    IReadOnlyList<BusinessTableSchemaResponse> Tables,
+    IReadOnlyList<string> TestPrompts);
 
 /// <summary>Contains a generated read-only report query and its results.</summary>
 public sealed record BusinessReportResponse(
@@ -44,6 +46,7 @@ public sealed record BusinessReportResponse(
     bool Truncated,
     string DatabaseId,
     string DatabaseName,
+    string ProviderName,
     bool IsDemoData,
     DateTimeOffset GeneratedAt,
     bool NeedsClarification = false);

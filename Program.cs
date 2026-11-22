@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,36 +13,61 @@ if (!Uri.TryCreate(ollamaUrl, UriKind.Absolute, out var ollamaUri) ||
 }
 
 var configuredDatabasePath = Environment.GetEnvironmentVariable("BUSINESS_DB_PATH");
-var databaseCatalog = configuredDatabasePath is null
-    ? new BusinessDatabaseCatalog(
-    [
-        new BusinessDatabase(
-            "sales-demo",
-            "Sales demo",
-            Path.Combine(builder.Environment.ContentRootPath, "data", "business-demo.sqlite"),
-            isDemoData: true,
-            businessRules: "For this sample sales database, revenue is order_items.quantity multiplied by order_items.unit_price. Unless specified otherwise, only completed orders count as sales. Dates are stored as ISO YYYY-MM-DD text."),
-        new BusinessDatabase(
-            "access-control-demo",
-            "Access control demo",
-            Path.Combine(builder.Environment.ContentRootPath, "data", "access-control-demo.sqlite"),
-            isDemoData: true,
-            businessRules: "This is synthetic physical access-control data. Join swipes to sites through readers and doors using the declared foreign keys. Join swipes to cardholders through cards. Attendance is precomputed in attendance_records; timestamps ending in Z are UTC. Enum values are case-sensitive and uppercase: swipes.access_result is GRANTED or DENIED; swipes.direction is IN, OUT, or ACCESS; cardholders.status is ACTIVE or INACTIVE; cards.status is ACTIVE, EXPIRED, or DISABLED; door and reader status is ONLINE or OFFLINE; door activity severity is INFO, WARNING, or ALARM. The sample contains swipe and attendance records only from 2026-11-16 through 2026-11-18; relative recent-date queries can legitimately return no rows.",
-            setupScriptPath: Path.Combine(builder.Environment.ContentRootPath, "data", "access-control-demo.sql"))
-    ], "sales-demo")
-    : new BusinessDatabaseCatalog(
-    [
-        new BusinessDatabase(
-            "configured",
-            "Configured SQLite database",
-            configuredDatabasePath,
-            isDemoData: false,
-            businessRules: "No business definitions are provided. Do not assume formulas or status meanings beyond the user's question.")
-    ], "configured");
+var databases = new List<IReportDatabase>
+{
+    new BusinessDatabase(
+        "sales-demo",
+        "Sales demo",
+        Path.Combine(builder.Environment.ContentRootPath, "data", "business-demo.sqlite"),
+        isDemoData: true,
+        businessRules: "For this sample sales database, revenue is order_items.quantity multiplied by order_items.unit_price. Unless specified otherwise, only completed orders count as sales. Dates are stored as ISO YYYY-MM-DD text.",
+        initializeOnStart: true),
+    new BusinessDatabase(
+        "access-control-demo",
+        "Access control demo",
+        Path.Combine(builder.Environment.ContentRootPath, "data", "access-control-demo.sqlite"),
+        isDemoData: true,
+        businessRules: "This is synthetic physical access-control data. Join swipes to sites through readers and doors using the declared foreign keys. Join swipes to cardholders through cards. Attendance is precomputed in attendance_records; timestamps ending in Z are UTC. Enum values are case-sensitive and uppercase: swipes.access_result is GRANTED or DENIED; swipes.direction is IN, OUT, or ACCESS; cardholders.status is ACTIVE or INACTIVE; cards.status is ACTIVE, EXPIRED, or DISABLED; door and reader status is ONLINE or OFFLINE; door activity severity is INFO, WARNING, or ALARM. The sample contains swipe and attendance records only from 2026-11-16 through 2026-11-18; relative recent-date queries can legitimately return no rows.",
+        setupScriptPath: Path.Combine(builder.Environment.ContentRootPath, "data", "access-control-demo.sql"),
+        initializeOnStart: true)
+};
+var defaultDatabaseId = "sales-demo";
+if (configuredDatabasePath is not null)
+{
+    databases.Add(new BusinessDatabase(
+        "configured",
+        "Configured SQLite database",
+        configuredDatabasePath,
+        isDemoData: false,
+        businessRules: "No business definitions are provided. Do not assume formulas or status meanings beyond the user's question.",
+        initializeOnStart: true));
+    defaultDatabaseId = "configured";
+}
+
+var databaseCatalog = new BusinessDatabaseCatalog(databases, defaultDatabaseId);
+var localDataDirectory = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+if (string.IsNullOrWhiteSpace(localDataDirectory))
+{
+    localDataDirectory = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        ".local",
+        "share");
+}
+
+var profileDirectory = Path.Combine(localDataDirectory, "OllamaDesk");
+var keyDirectory = Path.Combine(profileDirectory, "DataProtectionKeys");
+EnsurePrivateDirectory(profileDirectory);
+EnsurePrivateDirectory(keyDirectory);
 
 builder.Services.AddOpenApi();
 builder.Services.AddValidation();
 builder.Services.AddProblemDetails();
+builder.Services.AddDataProtection()
+    .SetApplicationName("OllamaDesk.DatabaseProfiles")
+    .PersistKeysToFileSystem(new DirectoryInfo(keyDirectory));
+builder.Services.AddSingleton(provider => new EncryptedDatabaseProfileStore(
+    Path.Combine(profileDirectory, "database-profiles.dat"),
+    provider.GetRequiredService<IDataProtectionProvider>()));
 builder.Services.AddSingleton(new HttpClient
 {
     BaseAddress = ollamaUri,
@@ -49,6 +75,7 @@ builder.Services.AddSingleton(new HttpClient
 });
 builder.Services.AddSingleton<MachineMetrics>();
 builder.Services.AddSingleton(databaseCatalog);
+builder.Services.AddSingleton<DatabaseProfileService>();
 builder.Services.AddHttpClient<IBusinessReportService, BusinessReportService>(client =>
 {
     client.BaseAddress = ollamaUri;
@@ -65,6 +92,8 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+var databaseProfiles = app.Services.GetRequiredService<DatabaseProfileService>();
+await databaseProfiles.InitializeAsync(CancellationToken.None);
 await databaseCatalog.InitializeAsync(CancellationToken.None);
 
 app.MapGet("/api/health", async (HttpClient ollama, CancellationToken cancellationToken) =>
@@ -114,6 +143,17 @@ app.MapPost("/api/models/unload", async (JsonElement body, HttpClient ollama, Ca
 app.MapBusinessReports();
 
 app.Run();
+
+static void EnsurePrivateDirectory(string path)
+{
+    Directory.CreateDirectory(path);
+    if (!OperatingSystem.IsWindows())
+    {
+        File.SetUnixFileMode(
+            path,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+    }
+}
 
 static async Task<IResult> ProxyGetAsync(HttpClient client, string path)
 {

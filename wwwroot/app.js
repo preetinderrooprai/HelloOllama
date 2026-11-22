@@ -1,5 +1,18 @@
 const $ = (selector) => document.querySelector(selector);
-const state = { models: [], messages: [], busy: false, reportBusy: false, connected: false, reportDatabasesLoaded: false };
+const state = {
+  models: [],
+  messages: [],
+  busy: false,
+  reportBusy: false,
+  connected: false,
+  reportDatabasesLoaded: false,
+  databaseProfiles: [],
+  databaseGuidanceProfileId: null,
+  databaseTodoItems: [],
+  databaseTestPrompts: [],
+  databaseGenerationBusy: false,
+  databaseGuidanceSaving: false
+};
 const api = async (path, options = {}) => {
   const response = await fetch(path, options);
   if (!response.ok) {
@@ -57,7 +70,6 @@ async function loadModels() {
     const data = await (await api('/api/models')).json();
     state.models = Array.isArray(data.models) ? data.models : [];
     renderModels();
-    $('#modelCount').textContent = state.models.length;
     if (!state.models.length) $('#connectionText').textContent = state.connected ? 'No models yet' : 'Ollama unavailable';
   } catch (error) {
     $('#sidebarModels').innerHTML = '';
@@ -74,13 +86,17 @@ function renderModels() {
   const previous = select.value;
   const reportSelect = $('#reportModel');
   const previousReportModel = reportSelect.value;
+  const safetySettingsModel = $('#databaseSafetySettingsModel');
+  const previousSafetyModel = safetySettingsModel.value;
   select.replaceChildren(new Option(state.models.length ? 'Select a model…' : 'Pull a model to get started…', ''));
   reportSelect.replaceChildren(new Option(state.models.length ? 'Select a model…' : 'Pull a model to get started…', ''));
+  safetySettingsModel.replaceChildren(new Option(state.models.length ? 'Select a model…' : 'No models available', ''));
   $('#sidebarModels').replaceChildren();
   for (const model of state.models) {
     const name = safeText(model.name || model.model);
     select.add(new Option(name, model.name || model.model));
     reportSelect.add(new Option(name, model.name || model.model));
+    safetySettingsModel.add(new Option(name, model.name || model.model));
     const item = document.createElement('button');
     item.className = 'sidebar-model';
     item.title = name;
@@ -106,9 +122,12 @@ function renderModels() {
   reportSelect.value = state.models.some((model) => (model.name || model.model) === previousReportModel)
     ? previousReportModel
     : select.value;
+  safetySettingsModel.value = state.models.some((model) => (model.name || model.model) === previousSafetyModel)
+    ? previousSafetyModel
+    : reportSelect.value;
   $('#sendButton').disabled = !select.value || state.busy;
-  $('#runReportButton').disabled = !$('#reportQuestion').value.trim() ||
-    !reportSelect.value || !$('#reportDatabase').value || state.reportBusy;
+  updateReportButton();
+  updateDatabasePromptButtons();
 }
 
 async function loadRunningModels() {
@@ -125,7 +144,7 @@ async function loadRunningModels() {
     select.value = models.some((model) => (model.name || model.model) === previous)
       ? previous
       : (models[0]?.name || models[0]?.model || '');
-    $('#unloadSelected').disabled = !select.value;
+    $('#offloadSelected').disabled = !select.value;
 
     const container = $('#runningModels');
     container.replaceChildren();
@@ -157,7 +176,7 @@ async function loadRunningModels() {
   } catch {
     $('#runningModels').textContent = 'Running model data unavailable.';
     $('#runningModelSelect').replaceChildren(new Option('Could not load models', ''));
-    $('#unloadSelected').disabled = true;
+    $('#offloadSelected').disabled = true;
   }
 }
 
@@ -165,7 +184,7 @@ async function offloadSelectedModel() {
   const model = $('#runningModelSelect').value;
   if (!model) return;
 
-  const button = $('#unloadSelected');
+  const button = $('#offloadSelected');
   button.disabled = true;
   try {
     await api('/api/models/unload', {
@@ -262,36 +281,63 @@ function renderMemoryUsers(metrics) {
 }
 
 function setWorkspaceMode(mode) {
+  const showingChat = mode === 'chat';
   const showingReports = mode === 'reports';
-  $('#chatColumn').hidden = showingReports;
+  const showingDatabases = mode === 'databases';
+  const showingSafety = mode === 'safety';
+  $('#chatColumn').hidden = !showingChat;
   $('#reportsColumn').hidden = !showingReports;
-  $('#settingsPanel').hidden = showingReports;
+  $('#databaseConnectionsColumn').hidden = !showingDatabases;
+  $('#chatSafetyColumn').hidden = !showingSafety;
+  $('#settingsPanel').hidden = !showingChat;
   $('#contentGrid').classList.toggle('report-mode', showingReports);
-  $('#chatNav').classList.toggle('active', !showingReports);
+  $('#contentGrid').classList.toggle('database-mode', showingDatabases || showingSafety);
+  $('#chatNav').classList.toggle('active', showingChat);
   $('#reportsNav').classList.toggle('active', showingReports);
-  $('#pageTitle').textContent = showingReports ? 'Business reports' : 'Chat';
+  $('#databasesNav').classList.toggle('active', showingDatabases);
+  $('#safetyNav').classList.toggle('active', showingSafety);
+  $('#pageTitle').textContent = showingReports
+    ? 'Database Chat'
+    : showingDatabases
+      ? 'Database connections'
+      : showingSafety
+        ? 'Chat Safety Settings'
+        : 'General Chat';
   if (showingReports) {
     if (state.reportDatabasesLoaded) void loadReportSchema();
     else void loadReportDatabases();
+  } else if (showingDatabases) {
+    void loadReportDatabases($('#reportDatabase').value || null);
+  } else if (showingSafety && state.reportDatabasesLoaded) {
+    renderGuidanceDatabaseOptions(state.databaseProfiles);
+  } else if (showingSafety) {
+    void loadReportDatabases();
   }
 }
 
-async function loadReportDatabases() {
+function updateReportButton() {
+  $('#runReportButton').disabled = !$('#reportQuestion').value.trim() ||
+    !$('#reportModel').value || !$('#reportDatabase').value || state.reportBusy;
+}
+
+async function loadReportDatabases(preferredDatabaseId = null) {
   const select = $('#reportDatabase');
   select.disabled = true;
   try {
     const databases = await (await api('/api/reports/databases')).json();
-    const previous = select.value;
+    const previous = preferredDatabaseId || select.value;
     select.replaceChildren();
     for (const database of databases) {
-      select.add(new Option(database.name, database.id));
+      select.add(new Option(`${database.name} · ${database.provider}`, database.id));
     }
+    renderDatabaseProfiles(databases);
 
     if (!databases.length) {
       select.add(new Option('No databases available', ''));
       $('#reportDatabaseStatus').textContent = 'No report databases available';
       $('#reportSchema').textContent = 'No report databases are registered.';
       state.reportDatabasesLoaded = true;
+      updateReportButton();
       return;
     }
 
@@ -301,11 +347,304 @@ async function loadReportDatabases() {
     select.disabled = databases.length < 2;
     state.reportDatabasesLoaded = true;
     await loadReportSchema();
+    updateReportButton();
   } catch (error) {
     select.replaceChildren(new Option('Database list unavailable', ''));
     $('#reportDatabaseStatus').textContent = 'Database list unavailable';
     $('#reportSchema').textContent = error.message;
+    $('#databaseProfileStatus').textContent = error.message;
+    $('#guidanceDatabaseSelect').replaceChildren(new Option('Saved profiles unavailable', ''));
+    $('#guidanceDatabaseSelect').disabled = true;
+    $('#chatSafetyEmpty').textContent = error.message;
+    $('#chatSafetyEmpty').hidden = false;
+    closeDatabaseGuidance();
     state.reportDatabasesLoaded = false;
+    updateReportButton();
+  }
+}
+
+function renderDatabaseProfiles(databases) {
+  state.databaseProfiles = databases;
+  const list = $('#databaseProfileList');
+  list.replaceChildren();
+  if (state.databaseGuidanceProfileId &&
+      !databases.some((database) => database.id === state.databaseGuidanceProfileId)) {
+    closeDatabaseGuidance();
+  }
+
+  for (const database of databases) {
+    const item = document.createElement('div');
+    item.className = 'database-profile-item';
+    const name = document.createElement('span');
+    name.textContent = `${database.name} · ${database.provider}`;
+    const kind = document.createElement('span');
+    kind.className = 'database-profile-kind';
+    kind.textContent = database.isDemoData
+      ? 'Built-in'
+      : database.canRemove
+        ? 'Saved profile'
+        : 'Environment';
+    item.append(name, kind);
+
+    if (database.canRemove) {
+      const actions = document.createElement('div');
+      actions.className = 'database-profile-item-actions';
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'database-profile-remove';
+      remove.textContent = 'Remove';
+      remove.addEventListener('click', () => void removeDatabaseProfile(database));
+      actions.append(remove);
+      item.append(actions);
+    }
+
+    list.append(item);
+  }
+
+  renderGuidanceDatabaseOptions(databases);
+}
+
+function renderGuidanceDatabaseOptions(databases) {
+  const select = $('#guidanceDatabaseSelect');
+  const savedProfiles = databases.filter((database) => database.canRemove);
+  const previous = state.databaseGuidanceProfileId || select.value;
+  select.replaceChildren(new Option(
+    savedProfiles.length ? 'Select a saved profile…' : 'No saved profiles available',
+    ''
+  ));
+  for (const profile of savedProfiles) {
+    select.add(new Option(`${profile.name} · ${profile.provider}`, profile.id));
+  }
+
+  select.value = savedProfiles.some((profile) => profile.id === previous) ? previous : '';
+  select.disabled = savedProfiles.length === 0;
+  $('#chatSafetyEmpty').textContent =
+    'No saved profiles yet. Add one in Database connections to configure its chat safety settings.';
+  $('#chatSafetyEmpty').hidden = savedProfiles.length > 0;
+  if (!select.value) {
+    closeDatabaseGuidance();
+  } else if (select.value !== state.databaseGuidanceProfileId) {
+    const profile = savedProfiles.find((item) => item.id === select.value);
+    if (profile) void openDatabaseGuidance(profile);
+  }
+}
+
+async function openDatabaseGuidance(database) {
+  state.databaseGuidanceProfileId = database.id;
+  $('#guidanceDatabaseSelect').value = database.id;
+  $('#databaseGuidancePanel').hidden = false;
+  $('#databaseGuidanceTitle').textContent = `Settings for ${database.name}`;
+  $('#databaseGuidanceStatus').textContent = 'Loading saved settings…';
+  $('#databaseSafetyGenerationStatus').textContent = '';
+  $('#databaseContext').value = '';
+  $('#databaseHints').value = '';
+  $('#databaseValidations').value = '';
+  $('#newDatabaseTodo').value = '';
+  $('#newDatabaseTestPrompt').value = '';
+  state.databaseTodoItems = [];
+  state.databaseTestPrompts = [];
+  renderDatabaseTodoItems();
+  renderDatabaseTestPrompts();
+  try {
+    const guidance = await (await api(
+      `/api/reports/databases/${encodeURIComponent(database.id)}/guidance`
+    )).json();
+    if (state.databaseGuidanceProfileId !== database.id) return;
+    $('#databaseContext').value = guidance.context || '';
+    $('#databaseHints').value = guidance.hints || '';
+    $('#databaseValidations').value = guidance.validations || '';
+    state.databaseTodoItems = (guidance.todoItems || []).map((item) => ({
+      text: item.text,
+      isComplete: Boolean(item.isComplete)
+    }));
+    state.databaseTestPrompts = (guidance.testPrompts || []).map((prompt) => String(prompt));
+    renderDatabaseTodoItems();
+    renderDatabaseTestPrompts();
+    $('#databaseGuidanceStatus').textContent = '';
+  } catch (error) {
+    if (state.databaseGuidanceProfileId === database.id) {
+      $('#databaseGuidanceStatus').textContent = error.message;
+    }
+  }
+  updateDatabasePromptButtons();
+}
+
+function closeDatabaseGuidance() {
+  state.databaseGuidanceProfileId = null;
+  state.databaseTodoItems = [];
+  state.databaseTestPrompts = [];
+  $('#databaseSafetyGenerationStatus').textContent = '';
+  $('#databaseGuidancePanel').hidden = true;
+  updateDatabasePromptButtons();
+}
+
+function renderDatabaseTodoItems() {
+  const list = $('#databaseTodoList');
+  list.replaceChildren();
+  state.databaseTodoItems.forEach((item, index) => {
+    const row = document.createElement('div');
+    row.className = 'database-editable-item todo-item';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = item.isComplete;
+    checkbox.setAttribute('aria-label', `Mark checklist item ${index + 1} complete`);
+    checkbox.addEventListener('change', () => {
+      item.isComplete = checkbox.checked;
+    });
+    const text = document.createElement('input');
+    text.type = 'text';
+    text.maxLength = 200;
+    text.value = item.text;
+    text.setAttribute('aria-label', `Checklist item ${index + 1}`);
+    text.addEventListener('input', () => {
+      item.text = text.value;
+    });
+    const remove = createDatabaseListRemoveButton('Remove checklist item', () => {
+      state.databaseTodoItems.splice(index, 1);
+      renderDatabaseTodoItems();
+    });
+    row.append(checkbox, text, remove);
+    list.append(row);
+  });
+}
+
+function renderDatabaseTestPrompts() {
+  const list = $('#databaseTestPromptList');
+  list.replaceChildren();
+  state.databaseTestPrompts.forEach((prompt, index) => {
+    const row = document.createElement('div');
+    row.className = 'database-editable-item prompt-item';
+    const text = document.createElement('input');
+    text.type = 'text';
+    text.maxLength = 200;
+    text.value = prompt;
+    text.setAttribute('aria-label', `Test prompt ${index + 1}`);
+    text.addEventListener('input', () => {
+      state.databaseTestPrompts[index] = text.value;
+    });
+    const remove = createDatabaseListRemoveButton('Remove test prompt', () => {
+      state.databaseTestPrompts.splice(index, 1);
+      renderDatabaseTestPrompts();
+      updateDatabasePromptButtons();
+    });
+    row.append(text, remove);
+    list.append(row);
+  });
+  updateDatabasePromptButtons();
+}
+
+function createDatabaseListRemoveButton(label, onClick) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'database-remove-item';
+  button.textContent = 'Remove';
+  button.setAttribute('aria-label', label);
+  button.addEventListener('click', onClick);
+  return button;
+}
+
+function updateDatabasePromptButtons() {
+  const canGenerate = Boolean(state.databaseGuidanceProfileId) &&
+    Boolean($('#databaseSafetySettingsModel').value) &&
+    !state.databaseGenerationBusy &&
+    !state.databaseGuidanceSaving;
+  $('#generateDatabaseSafetySettings').disabled = !canGenerate;
+  $('#generateDatabaseTestPrompts').disabled =
+    !canGenerate;
+  $('#addDatabaseTestPrompt').disabled =
+    !state.databaseGuidanceProfileId || state.databaseTestPrompts.length >= 3;
+  $('#saveDatabaseGuidance').disabled =
+    state.databaseGenerationBusy || state.databaseGuidanceSaving;
+}
+
+async function generateDatabaseTestPrompts() {
+  const databaseId = state.databaseGuidanceProfileId;
+  const model = $('#databaseSafetySettingsModel').value;
+  if (!databaseId || !model || state.databaseGenerationBusy || state.databaseGuidanceSaving) return;
+
+  state.databaseGenerationBusy = true;
+  $('#databaseGuidanceStatus').textContent = 'Generating test prompts…';
+  updateDatabasePromptButtons();
+  try {
+    const prompts = await (await api(
+      `/api/reports/databases/${encodeURIComponent(databaseId)}/test-prompts`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model })
+      }
+    )).json();
+    if (state.databaseGuidanceProfileId !== databaseId) return;
+    state.databaseTestPrompts = prompts;
+    renderDatabaseTestPrompts();
+    $('#databaseGuidanceStatus').textContent =
+      'Review the generated prompts, then save them with this profile.';
+  } catch (error) {
+    if (state.databaseGuidanceProfileId === databaseId) {
+      $('#databaseGuidanceStatus').textContent = error.message;
+    }
+  } finally {
+    state.databaseGenerationBusy = false;
+    updateDatabasePromptButtons();
+  }
+}
+
+async function generateDatabaseSafetySettings() {
+  const databaseId = state.databaseGuidanceProfileId;
+  const model = $('#databaseSafetySettingsModel').value;
+  if (!databaseId || !model || state.databaseGenerationBusy || state.databaseGuidanceSaving) return;
+
+  state.databaseGenerationBusy = true;
+  $('#databaseSafetyGenerationStatus').textContent = 'Generating starter settings…';
+  $('#databaseGuidanceStatus').textContent = '';
+  updateDatabasePromptButtons();
+  try {
+    const draft = await (await api(
+      `/api/reports/databases/${encodeURIComponent(databaseId)}/safety-settings-draft`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model })
+      }
+    )).json();
+    if (state.databaseGuidanceProfileId !== databaseId) return;
+
+    $('#databaseContext').value = draft.context;
+    $('#databaseHints').value = draft.hints;
+    $('#databaseValidations').value = draft.validations;
+    state.databaseTodoItems = (draft.todoItems || []).map((item) => ({
+      text: item.text,
+      isComplete: false
+    }));
+    state.databaseTestPrompts = (draft.testPrompts || []).map((prompt) => String(prompt));
+    renderDatabaseTodoItems();
+    renderDatabaseTestPrompts();
+    $('#databaseSafetyGenerationStatus').textContent =
+      'Starter settings generated. Review all fields below, then save them with the profile.';
+  } catch (error) {
+    if (state.databaseGuidanceProfileId === databaseId) {
+      $('#databaseSafetyGenerationStatus').textContent = error.message === 'Not Found'
+        ? 'This running server does not have the settings-generation endpoint (404). Restart HelloOllama and reload this page.'
+        : error.message;
+    }
+  } finally {
+    state.databaseGenerationBusy = false;
+    updateDatabasePromptButtons();
+  }
+}
+
+async function removeDatabaseProfile(database) {
+  if (!window.confirm(`Remove "${database.name}" from HelloOllama? The database itself will not be deleted or modified.`)) {
+    return;
+  }
+
+  const selectedDatabaseId = $('#reportDatabase').value;
+  try {
+    await api(`/api/reports/databases/${encodeURIComponent(database.id)}`, { method: 'DELETE' });
+    $('#databaseProfileStatus').textContent = `Removed ${database.name}. The database itself was not changed.`;
+    await loadReportDatabases(selectedDatabaseId === database.id ? null : selectedDatabaseId);
+  } catch (error) {
+    $('#databaseProfileStatus').textContent = error.message;
   }
 }
 
@@ -317,7 +656,7 @@ async function loadReportSchema() {
     const schema = await (await api(`/api/reports/schema?databaseId=${encodeURIComponent(databaseId)}`)).json();
     if (databaseId !== $('#reportDatabase').value) return;
     $('#reportDatabaseStatus').textContent =
-      `${schema.databaseName} · SQLite · Read only${schema.isDemoData ? ' · sample data' : ''}`;
+      `${schema.databaseName} · ${schema.providerName} · Read only${schema.isDemoData ? ' · sample data' : ''}`;
     $('#reportQuestion').placeholder = schema.databaseId === 'access-control-demo'
       ? 'Ask about cardholders, sites, swipes, doors, readers, or attendance…'
       : schema.databaseId === 'sales-demo'
@@ -333,12 +672,34 @@ async function loadReportSchema() {
       container.append(line);
     }
     if (!schema.tables?.length) container.textContent = 'No tables found in this database.';
+    renderSavedReportPrompts(schema.testPrompts || []);
     updateReportWelcome(schema);
   } catch (error) {
     if (databaseId !== $('#reportDatabase').value) return;
     $('#reportDatabaseStatus').textContent = 'Database unavailable';
     $('#reportSchema').textContent = error.message;
+    renderSavedReportPrompts([]);
   }
+}
+
+function renderSavedReportPrompts(prompts) {
+  const panel = $('#reportSavedPrompts');
+  const list = $('#reportSavedPromptList');
+  list.replaceChildren();
+  for (const prompt of prompts) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'report-suggestion';
+    button.textContent = prompt;
+    button.dataset.reportQuestion = prompt;
+    button.addEventListener('click', () => {
+      $('#reportQuestion').value = prompt;
+      $('#reportQuestion').dispatchEvent(new Event('input'));
+      $('#reportQuestion').focus();
+    });
+    list.append(button);
+  }
+  panel.hidden = prompts.length === 0;
 }
 
 function updateReportWelcome(schema) {
@@ -359,7 +720,7 @@ function updateReportWelcome(schema) {
         ['Daily attendance', 'For 2026-11-16, list each cardholder name, site name, attendance status, first entry time, last exit time, and minutes on site. Join attendance_records.cardholder_id to cardholders.cardholder_id and attendance_records.site_id to sites.site_id.'],
         ['Door alerts', 'List door activities with severity ALARM or WARNING from 2026-11-16 through 2026-11-18. Include site, door, event time, event type, severity, and details. Join door_activities.door_id to doors.door_id and doors.site_id to sites.site_id.']
       ]
-      : [];
+    : [];
 
   const description = welcome.querySelector('p');
   description.textContent = isSalesDemo
@@ -393,7 +754,7 @@ function renderReportResult(container, report) {
   const meta = document.createElement('p');
   meta.className = 'report-meta';
   const rowCount = report.rows?.length || 0;
-  meta.textContent = `${rowCount} row${rowCount === 1 ? '' : 's'}${report.truncated ? ` shown (limited to 100)` : ''} · ${report.databaseName}${report.isDemoData ? ' · sample data' : ''} · ${new Date(report.generatedAt).toLocaleTimeString()}`;
+  meta.textContent = `${rowCount} row${rowCount === 1 ? '' : 's'}${report.truncated ? ` shown (limited to 100)` : ''} · ${report.databaseName} · ${report.providerName}${report.isDemoData ? ' · sample data' : ''} · ${new Date(report.generatedAt).toLocaleTimeString()}`;
   container.append(summary, meta);
 
   if (report.columns?.length) {
@@ -491,8 +852,7 @@ async function runBusinessReport(question, retryModel = null, retryDatabaseId = 
     response.replaceChildren(message, retryButton);
   } finally {
     state.reportBusy = false;
-    $('#runReportButton').disabled = !$('#reportQuestion').value.trim() ||
-      !$('#reportModel').value || !$('#reportDatabase').value;
+    updateReportButton();
     $('#reportFeed').scrollTop = $('#reportFeed').scrollHeight;
     $('#reportQuestion').focus();
   }
@@ -688,7 +1048,7 @@ async function executeCommand() {
         result.textContent = JSON.stringify(data, null, 2);
         result.hidden = false;
       } else {
-        toast(action === 'unload' ? `Unloaded ${model}.` : `${action === 'delete' ? 'Deleted' : 'Copied'} ${model}.`);
+        toast(action === 'unload' ? `Offloaded ${model}.` : `${action === 'delete' ? 'Deleted' : 'Copied'} ${model}.`);
       }
       await loadModels();
       await loadRunningModels();
@@ -720,29 +1080,153 @@ function setup() {
   $('#chatModel').addEventListener('change', () => { $('#sendButton').disabled = !$('#chatModel').value || state.busy; });
   $('#chatModel').addEventListener('change', () => {
     $('#reportModel').value = $('#chatModel').value;
-    $('#runReportButton').disabled = !$('#reportQuestion').value.trim() ||
-      !$('#reportModel').value || !$('#reportDatabase').value || state.reportBusy;
+    updateReportButton();
   });
   $('#reportModel').addEventListener('change', () => {
     $('#chatModel').value = $('#reportModel').value;
     $('#sendButton').disabled = !$('#chatModel').value || state.busy;
-    $('#runReportButton').disabled = !$('#reportQuestion').value.trim() ||
-      !$('#reportModel').value || !$('#reportDatabase').value || state.reportBusy;
+    updateReportButton();
+  });
+  $('#databaseSafetySettingsModel').addEventListener('change', updateDatabasePromptButtons);
+  $('#guidanceDatabaseSelect').addEventListener('change', () => {
+    const profile = state.databaseProfiles.find((database) =>
+      database.id === $('#guidanceDatabaseSelect').value && database.canRemove);
+    if (profile) void openDatabaseGuidance(profile);
+    else closeDatabaseGuidance();
+  });
+  $('#addDatabaseTodo').addEventListener('click', () => {
+    const text = $('#newDatabaseTodo').value.trim();
+    if (!text) {
+      $('#databaseGuidanceStatus').textContent = 'Enter a checklist item before adding it.';
+      return;
+    }
+    if (state.databaseTodoItems.length >= 25) {
+      $('#databaseGuidanceStatus').textContent = 'A profile can have at most 25 checklist items.';
+      return;
+    }
+    state.databaseTodoItems.push({ text, isComplete: false });
+    $('#newDatabaseTodo').value = '';
+    $('#databaseGuidanceStatus').textContent = '';
+    renderDatabaseTodoItems();
+  });
+  $('#addDatabaseTestPrompt').addEventListener('click', () => {
+    const text = $('#newDatabaseTestPrompt').value.trim();
+    if (!text) {
+      $('#databaseGuidanceStatus').textContent = 'Enter a test question before adding it.';
+      return;
+    }
+    if (state.databaseTestPrompts.length >= 3) {
+      $('#databaseGuidanceStatus').textContent = 'A profile can have at most three test prompts.';
+      return;
+    }
+    state.databaseTestPrompts.push(text);
+    $('#newDatabaseTestPrompt').value = '';
+    $('#databaseGuidanceStatus').textContent = '';
+    renderDatabaseTestPrompts();
+  });
+  $('#generateDatabaseTestPrompts').addEventListener('click', () => {
+    void generateDatabaseTestPrompts();
+  });
+  $('#generateDatabaseSafetySettings').addEventListener('click', () => {
+    void generateDatabaseSafetySettings();
+  });
+  $('#databaseGuidanceForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const databaseId = state.databaseGuidanceProfileId;
+    if (!databaseId || state.databaseGenerationBusy || state.databaseGuidanceSaving) return;
+
+    state.databaseGuidanceSaving = true;
+    updateDatabasePromptButtons();
+    $('#databaseGuidanceStatus').textContent = 'Saving profile settings…';
+    try {
+      const guidance = await (await api(
+        `/api/reports/databases/${encodeURIComponent(databaseId)}/guidance`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            context: $('#databaseContext').value,
+            hints: $('#databaseHints').value,
+            validations: $('#databaseValidations').value,
+            todoItems: state.databaseTodoItems,
+            testPrompts: state.databaseTestPrompts
+          })
+        }
+      )).json();
+      if (state.databaseGuidanceProfileId !== databaseId) return;
+      state.databaseTodoItems = guidance.todoItems || [];
+      state.databaseTestPrompts = guidance.testPrompts || [];
+      renderDatabaseTodoItems();
+      renderDatabaseTestPrompts();
+      $('#databaseGuidanceStatus').textContent =
+        `Saved settings and test prompts with ${guidance.databaseName}.`;
+      $('#databaseSafetyGenerationStatus').textContent = '';
+      if ($('#reportDatabase').value === databaseId) void loadReportSchema();
+    } catch (error) {
+      if (state.databaseGuidanceProfileId === databaseId) {
+        $('#databaseGuidanceStatus').textContent = error.message;
+      }
+    } finally {
+      state.databaseGuidanceSaving = false;
+      updateDatabasePromptButtons();
+    }
   });
   $('#reportDatabase').addEventListener('change', () => {
-    $('#runReportButton').disabled = !$('#reportQuestion').value.trim() ||
-      !$('#reportModel').value || !$('#reportDatabase').value || state.reportBusy;
+    updateReportButton();
     void loadReportSchema();
+  });
+  $('#databaseProfileProvider').addEventListener('change', () => {
+    $('#databaseProfileConnectionString').placeholder =
+      $('#databaseProfileProvider').value === 'sqlserver'
+        ? 'Server=localhost;Database=YourDatabase;User Id=...;Password=...;Encrypt=True'
+        : 'Data Source=/absolute/path/to/database.sqlite';
+  });
+  $('#toggleDatabaseConnectionString').addEventListener('click', (event) => {
+    const input = $('#databaseProfileConnectionString');
+    const button = event.currentTarget;
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    button.textContent = show ? 'Hide' : 'Show';
+    button.setAttribute('aria-pressed', String(show));
+  });
+  $('#databaseProfileForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const submit = form.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    $('#databaseProfileStatus').textContent = 'Testing connection and saving profile…';
+    try {
+      const response = await (await api('/api/reports/databases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: $('#databaseProfileName').value,
+          provider: $('#databaseProfileProvider').value,
+          connectionString: $('#databaseProfileConnectionString').value
+        })
+      })).json();
+      $('#databaseProfileConnectionString').value = '';
+      $('#databaseProfileConnectionString').type = 'password';
+      $('#toggleDatabaseConnectionString').textContent = 'Show';
+      $('#toggleDatabaseConnectionString').setAttribute('aria-pressed', 'false');
+      $('#databaseProfileStatus').textContent = `Connected and saved ${response.name}.`;
+      await loadReportDatabases(response.id);
+    } catch (error) {
+      $('#databaseProfileStatus').textContent = error.message;
+    } finally {
+      submit.disabled = false;
+    }
   });
   $('#chatNav').addEventListener('click', () => setWorkspaceMode('chat'));
   $('#reportsNav').addEventListener('click', () => setWorkspaceMode('reports'));
+  $('#databasesNav').addEventListener('click', () => setWorkspaceMode('databases'));
+  $('#safetyNav').addEventListener('click', () => setWorkspaceMode('safety'));
   $('#reportForm').addEventListener('submit', (event) => {
     event.preventDefault();
     runBusinessReport($('#reportQuestion').value);
   });
   $('#reportQuestion').addEventListener('input', () => {
-    $('#runReportButton').disabled = !$('#reportQuestion').value.trim() ||
-      !$('#reportModel').value || !$('#reportDatabase').value || state.reportBusy;
+    updateReportButton();
   });
   $('#reportQuestion').addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -756,6 +1240,7 @@ function setup() {
     $('#reportQuestion').focus();
   }));
   $('#newChat').addEventListener('click', () => {
+    setWorkspaceMode('chat');
     state.messages = [];
     $('#chatMessages').replaceChildren();
     const welcome = document.createElement('div');
@@ -770,14 +1255,9 @@ function setup() {
   $('#refreshMetrics').addEventListener('click', loadMetrics);
   $('#refreshRunning').addEventListener('click', loadRunningModels);
   $('#runningModelSelect').addEventListener('change', () => {
-    $('#unloadSelected').disabled = !$('#runningModelSelect').value;
+    $('#offloadSelected').disabled = !$('#runningModelSelect').value;
   });
-  $('#unloadSelected').addEventListener('click', offloadSelectedModel);
-  $('#scrollModels').addEventListener('click', () => {
-    $('#commandSelect').value = 'pull';
-    toggleCommandFields();
-    $('#commandsDialog').showModal();
-  });
+  $('#offloadSelected').addEventListener('click', offloadSelectedModel);
   $('#openCommands').addEventListener('click', () => {
     toggleCommandFields();
     $('#commandsDialog').showModal();

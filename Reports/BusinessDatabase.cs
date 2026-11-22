@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
+using System.Data.Common;
 
-public sealed class BusinessDatabase
+public sealed class BusinessDatabase : IReportDatabase
 {
     private const string DemoSchema = """
         CREATE TABLE IF NOT EXISTS regions (
@@ -66,6 +67,8 @@ public sealed class BusinessDatabase
     private readonly string _path;
     private readonly string _readOnlyConnectionString;
     private readonly bool _isDemoData;
+    private readonly bool _canRemove;
+    private readonly bool _initializeOnStart;
     private readonly string? _setupScriptPath;
 
     public BusinessDatabase(
@@ -74,29 +77,97 @@ public sealed class BusinessDatabase
         string path,
         bool isDemoData,
         string businessRules,
-        string? setupScriptPath = null)
+        string? setupScriptPath = null,
+        bool canRemove = false,
+        bool initializeOnStart = false,
+        IReadOnlyList<string>? testPrompts = null)
+        : this(
+            id,
+            displayName,
+            Path.GetFullPath(path),
+            new SqliteConnectionStringBuilder
+            {
+                DataSource = Path.GetFullPath(path),
+                Mode = SqliteOpenMode.ReadOnly,
+                Pooling = false
+            }.ToString(),
+            isDemoData,
+            businessRules,
+            setupScriptPath,
+            canRemove,
+            initializeOnStart,
+            testPrompts)
+    {
+    }
+
+    private BusinessDatabase(
+        string id,
+        string displayName,
+        string path,
+        string readOnlyConnectionString,
+        bool isDemoData,
+        string businessRules,
+        string? setupScriptPath,
+        bool canRemove,
+        bool initializeOnStart,
+        IReadOnlyList<string>? testPrompts)
     {
         Id = id;
         DisplayName = displayName;
-        _path = Path.GetFullPath(path);
+        _path = path;
         _isDemoData = isDemoData;
+        _canRemove = canRemove;
+        _initializeOnStart = initializeOnStart;
         BusinessRules = businessRules;
+        TestPrompts = testPrompts?.ToArray() ?? [];
         _setupScriptPath = setupScriptPath is null ? null : Path.GetFullPath(setupScriptPath);
-        _readOnlyConnectionString = new SqliteConnectionStringBuilder
+        _readOnlyConnectionString = readOnlyConnectionString;
+    }
+
+    public static BusinessDatabase FromConnectionString(
+        string id,
+        string displayName,
+        string connectionString,
+        string businessRules,
+        IReadOnlyList<string>? testPrompts = null)
+    {
+        var builder = new SqliteConnectionStringBuilder(connectionString)
         {
-            DataSource = _path,
             Mode = SqliteOpenMode.ReadOnly,
             Pooling = false
-        }.ToString();
+        };
+        var path = Path.GetFullPath(builder.DataSource);
+        builder.DataSource = path;
+        return new BusinessDatabase(
+            id,
+            displayName,
+            path,
+            builder.ToString(),
+            isDemoData: false,
+            businessRules,
+            setupScriptPath: null,
+            canRemove: true,
+            initializeOnStart: false,
+            testPrompts: testPrompts);
     }
 
     public string Id { get; }
     public string DisplayName { get; }
+    public string ProviderName => "SQLite";
+    public ReportDatabaseProvider Provider => ReportDatabaseProvider.Sqlite;
     public bool IsDemoData => _isDemoData;
+    public bool CanRemove => _canRemove;
+    public bool InitializeOnStart => _initializeOnStart;
     public string BusinessRules { get; }
+    public IReadOnlyList<string> TestPrompts { get; }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
+        if (!_initializeOnStart)
+        {
+            return;
+        }
+
         if (!_isDemoData && !File.Exists(_path))
         {
             throw new FileNotFoundException(
@@ -148,7 +219,7 @@ public sealed class BusinessDatabase
         transaction.Commit();
     }
 
-    public async Task<SqliteConnection> OpenReadOnlyConnectionAsync(CancellationToken cancellationToken)
+    public async Task<DbConnection> OpenReadOnlyConnectionAsync(CancellationToken cancellationToken)
     {
         var connection = new SqliteConnection(_readOnlyConnectionString);
         var disposeConnection = true;
@@ -169,4 +240,7 @@ public sealed class BusinessDatabase
             }
         }
     }
+
+    public bool IsRepairableQueryError(DbException exception) =>
+        exception is SqliteException { SqliteErrorCode: 1 };
 }

@@ -4,23 +4,25 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#101112">
-  <title>Ollama Desk</title>
-  <link rel="stylesheet" href="/styles.css">
-  <script src="/app.js?v=reports-db-selector" defer></script>
+  <title>HelloOllama</title>
+  <link rel="stylesheet" href="/styles.css?v=theme-and-safety-settings-fix">
+  <script src="/theme.js?v=theme-and-safety-settings-fix" defer></script>
+  <script src="/app.js?v=theme-and-safety-settings-fix" defer></script>
 </head>
 <body>
   <div class="app-shell">
     <aside class="sidebar">
-      <a class="brand" href="/" aria-label="Ollama Desk home">
-        <span class="brand-mark">O</span><span>ollama<span class="brand-light">desk</span></span>
+      <a class="brand" href="/" aria-label="HelloOllama home">
+        <span class="brand-mark">H</span><span>Hello<span class="brand-light">Ollama</span></span>
       </a>
       <button class="new-chat" id="newChat"><span>＋</span> New chat</button>
       <div class="side-label">WORKSPACE</div>
-      <button class="nav-item active" id="chatNav"><span class="nav-icon">◈</span> Chat <span class="nav-shortcut">⌘ K</span></button>
-      <button class="nav-item" id="reportsNav"><span class="nav-icon">▧</span> Business reports</button>
-      <a class="nav-item" href="/learning.html"><span class="nav-icon">ⓘ</span> Learn reports</a>
-      <button class="nav-item" id="scrollModels"><span class="nav-icon">▤</span> Models <span class="count-pill" id="modelCount">0</span></button>
-      <button class="nav-item" id="openCommands"><span class="nav-icon">⌘</span> Commands</button>
+      <button class="nav-item active" id="chatNav"><span class="nav-icon">◈</span> General Chat <span class="nav-shortcut">⌘ K</span></button>
+      <button class="nav-item" id="reportsNav"><span class="nav-icon">▧</span> Database Chat</button>
+      <button class="nav-item" id="databasesNav"><span class="nav-icon">▦</span> Database connections</button>
+      <button class="nav-item" id="safetyNav"><span class="nav-icon">◈</span> Chat Safety Settings</button>
+      <a class="nav-item" href="/learning.html"><span class="nav-icon">ⓘ</span> Database Chat guide</a>
+      <button class="nav-item" id="openCommands"><span class="nav-icon">▤</span> Load/Offload Models</button>
       <div class="side-label model-label">YOUR MODELS <button id="refreshModels" class="icon-button" title="Refresh models">↻</button></div>
       <div id="sidebarModels" class="sidebar-models"><div class="side-empty">Loading models…</div></div>
       <div class="sidebar-bottom">
@@ -31,10 +33,18 @@
 
     <main class="main-content">
       <header class="topbar">
-        <div class="breadcrumb"><span>Workspace</span><span class="crumb-sep">/</span><strong id="pageTitle">Chat</strong></div>
+        <div class="breadcrumb"><span>Workspace</span><span class="crumb-sep">/</span><strong id="pageTitle">General Chat</strong></div>
         <div class="top-actions">
+          <label class="theme-control">
+            <span class="sr-only">Color theme</span>
+            <select id="themeSelect" aria-label="Color theme" title="Color theme">
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+              <option value="system">System</option>
+            </select>
+          </label>
           <span class="local-badge"><span></span> LOCAL</span>
-          <button class="icon-button help-button" id="openAbout" title="About Ollama Desk">?</button>
+          <button class="icon-button help-button" id="openAbout" title="About HelloOllama">?</button>
         </div>
       </header>
 
@@ -96,7 +106,7 @@
 
         <section id="reportsColumn" class="reports-column" hidden>
           <div class="reports-header">
-            <div class="eyebrow">LOCAL SQLITE · READ-ONLY REPORTING</div>
+            <div class="eyebrow">LOCAL DATABASES · READ-ONLY REPORTING</div>
             <h1>Ask your business data</h1>
             <p>Ask a question in plain language. Each report is independent, so include specific names or IDs instead of relying on earlier questions.</p>
             <div class="report-database-status"><span class="status-dot connected"></span><span id="reportDatabaseStatus">Loading database schema…</span></div>
@@ -106,6 +116,10 @@
               <summary>Available tables and columns</summary>
               <div id="reportSchema" class="report-schema">Loading schema…</div>
             </details>
+          </div>
+          <div id="reportSavedPrompts" class="report-saved-prompts" hidden>
+            <span class="report-saved-prompts-label">SAVED TEST PROMPTS</span>
+            <div id="reportSavedPromptList" class="report-suggestions"></div>
           </div>
           <div id="reportFeed" class="report-feed">
             <div id="reportWelcome" class="report-welcome">
@@ -130,6 +144,124 @@
             </div>
           </form>
           <div class="chat-footnote">Generated SQL is restricted to read-only queries. Check reports before using them for decisions.</div>
+        </section>
+
+        <section id="databaseConnectionsColumn" class="database-column" hidden>
+          <div class="database-page-header">
+            <div class="eyebrow">LOCAL DATABASE MANAGEMENT</div>
+            <h1>Database connections</h1>
+            <p>Add or remove database profiles for Database Chat. The database itself is never changed by profile management.</p>
+          </div>
+          <div class="database-page-grid">
+            <article class="database-panel">
+              <h2>Connect a database</h2>
+              <p class="database-manager-note">Connection strings are encrypted in local app storage. For SQL Server, use an account with read-only permissions.</p>
+              <form id="databaseProfileForm" class="database-profile-form">
+                <label>
+                  <span>PROFILE NAME</span>
+                  <input id="databaseProfileName" type="text" maxlength="100" required placeholder="Finance reporting">
+                </label>
+                <label>
+                  <span>DATABASE TYPE</span>
+                  <select id="databaseProfileProvider">
+                    <option value="sqlite">SQLite</option>
+                    <option value="sqlserver">SQL Server</option>
+                  </select>
+                </label>
+                <label class="database-connection-field">
+                  <span>CONNECTION STRING</span>
+                  <div class="database-connection-input">
+                    <input id="databaseProfileConnectionString" type="password" maxlength="4000" required autocomplete="new-password" spellcheck="false" placeholder="Data Source=/absolute/path/to/database.sqlite">
+                    <button id="toggleDatabaseConnectionString" class="text-button" type="button" aria-pressed="false">Show</button>
+                  </div>
+                </label>
+                <div class="database-profile-actions">
+                  <button class="report-retry" type="submit">Connect and save</button>
+                  <span id="databaseProfileStatus" class="report-meta" role="status"></span>
+                </div>
+              </form>
+            </article>
+            <article class="database-panel">
+              <h2>Available connections</h2>
+              <p class="database-manager-note">Built-in demos stay available. Edit saved profile guidance in Chat Safety Settings.</p>
+              <div id="databaseProfileList" class="database-profile-list"></div>
+            </article>
+          </div>
+        </section>
+
+        <section id="chatSafetyColumn" class="database-column" hidden>
+          <div class="database-page-header">
+            <div class="eyebrow">CHAT SAFETY SETTINGS</div>
+            <h1>Chat Safety Settings</h1>
+            <p>Set per-database context, reporting hints, validation guidance, and test prompts for Database Chat.</p>
+          </div>
+          <div class="database-safety-content">
+            <article class="database-panel">
+              <h2>Database profile</h2>
+              <label class="database-guidance-field" for="guidanceDatabaseSelect">
+                <span>SELECT A SAVED PROFILE</span>
+                <select id="guidanceDatabaseSelect" class="database-profile-select" aria-label="Select a saved database profile">
+                  <option value="">Loading profiles…</option>
+                </select>
+              </label>
+              <p id="chatSafetyEmpty" class="database-manager-note" hidden>No saved profiles yet. Add one in Database connections to configure its chat safety settings.</p>
+              <div class="database-safety-actions">
+                <label class="database-guidance-field">
+                  <span>LOCAL MODEL</span>
+                  <select id="databaseSafetySettingsModel" class="command-select" aria-label="Model for generating chat safety settings">
+                    <option value="">Select a model…</option>
+                  </select>
+                </label>
+                <button id="generateDatabaseSafetySettings" class="secondary-button" type="button" aria-label="Generate basic settings with AI">✳ Generate basic settings</button>
+                <span id="databaseSafetyGenerationStatus" class="report-meta" role="status"></span>
+              </div>
+              <p class="database-manager-note">Generation replaces the context, hints, validation, checklist, and test prompts below. Review the draft, then save it with the profile.</p>
+            </article>
+            <article id="databaseGuidancePanel" class="database-panel database-guidance-panel" hidden>
+              <div class="database-guidance-heading">
+                <h3 id="databaseGuidanceTitle">Database chat settings</h3>
+              </div>
+              <p class="database-manager-note">Context, hints, and validation notes are sent to the model as guidance, not enforced by the app. Saved test prompts appear in Database Chat.</p>
+              <form id="databaseGuidanceForm">
+                <label class="database-guidance-field">
+                  <span>DATABASE CONTEXT</span>
+                  <textarea id="databaseContext" maxlength="2000" rows="3" placeholder="Describe the purpose of this database and important business definitions."></textarea>
+                </label>
+                <label class="database-guidance-field">
+                  <span>HINTS FOR REPORTS</span>
+                  <textarea id="databaseHints" maxlength="2000" rows="3" placeholder="Add helpful join, date, status, or aggregation guidance."></textarea>
+                </label>
+                <label class="database-guidance-field">
+                  <span>VALIDATION GUIDANCE · INFORMATIONAL ONLY</span>
+                  <textarea id="databaseValidations" maxlength="2000" rows="3" placeholder="Explain what users should check in generated reports."></textarea>
+                </label>
+                <div class="database-guidance-section">
+                  <h4>To-do checklist</h4>
+                  <div id="databaseTodoList" class="database-editable-list"></div>
+                  <div class="database-add-item">
+                    <input id="newDatabaseTodo" type="text" maxlength="200" placeholder="Add a checklist item">
+                    <button id="addDatabaseTodo" class="secondary-button" type="button">Add item</button>
+                  </div>
+                </div>
+                <div class="database-guidance-section">
+                  <h4>Generate test prompts</h4>
+                  <p class="database-manager-note">Generate three example questions from this database's schema and guidance, review them, then save them with the profile.</p>
+                  <div class="database-prompt-generator">
+                    <button id="generateDatabaseTestPrompts" class="secondary-button" type="button" aria-label="Generate test prompts with AI">✳ Generate prompts</button>
+                  </div>
+                  <div id="databaseTestPromptList" class="database-editable-list"></div>
+                  <div class="database-add-item">
+                    <input id="newDatabaseTestPrompt" type="text" maxlength="200" placeholder="Add a test question">
+                    <button id="addDatabaseTestPrompt" class="secondary-button" type="button">Add prompt</button>
+                  </div>
+                </div>
+                <div class="database-profile-actions">
+                  <button id="saveDatabaseGuidance" class="report-retry" type="submit">Save with profile</button>
+                  <span id="databaseGuidanceStatus" class="report-meta" role="status"></span>
+                </div>
+              </form>
+            </article>
+          </div>
         </section>
 
         <aside class="settings-panel" id="settingsPanel">
@@ -159,7 +291,7 @@
               <select id="runningModelSelect" class="command-select" aria-label="Select a loaded model to offload">
                 <option value="">No models loaded</option>
               </select>
-              <button id="unloadSelected" class="secondary-button unload-button" type="button" disabled>Offload</button>
+              <button id="offloadSelected" class="secondary-button offload-button" type="button" disabled>Offload</button>
             </div>
             <div id="runningModels" class="running-models"><div class="side-empty">Checking…</div></div>
           </div>
@@ -171,12 +303,12 @@
   <div class="toast-region" id="toastRegion" aria-live="polite"></div>
 
   <dialog id="commandsDialog" class="dialog">
-    <form method="dialog" class="dialog-top"><div><span class="panel-icon">⌘</span><h2>Ollama commands</h2></div><button class="icon-button close-dialog" aria-label="Close">×</button></form>
-    <p class="dialog-description">Run common model-management actions against your local Ollama instance.</p>
+    <form method="dialog" class="dialog-top"><div><span class="panel-icon">▤</span><h2>Load/Offload Models</h2></div><button class="icon-button close-dialog" aria-label="Close">×</button></form>
+    <p class="dialog-description">Manage models on your local Ollama instance: pull, inspect, copy, offload, or delete them.</p>
     <label class="field-label" for="commandSelect">Action</label>
     <select id="commandSelect" class="command-select">
       <option value="pull">Pull a model</option><option value="show">Show model details</option>
-      <option value="copy">Copy a model</option><option value="unload">Unload a running model</option>
+      <option value="copy">Copy a model</option><option value="unload">Offload a running model</option>
       <option value="delete">Delete a model</option>
     </select>
     <div id="pullModelField" hidden>
@@ -202,11 +334,11 @@
     <div id="commandProgress" class="command-progress" hidden><div class="meter"><span id="commandProgressMeter"></span></div><p id="commandProgressText"></p></div>
     <pre id="commandResult" class="command-result" hidden></pre>
     <div class="dialog-actions"><button type="button" class="secondary-button" id="cancelCommand">Cancel</button><button type="button" class="primary-button" id="runCommand">Run command</button></div>
-    <div class="command-safety">Commands are sent to Ollama’s local API. No arbitrary shell commands are executed.</div>
+    <div class="command-safety">Model actions are sent to Ollama’s local API. No arbitrary shell commands are executed.</div>
   </dialog>
 
   <dialog id="aboutDialog" class="dialog about-dialog">
-    <form method="dialog" class="dialog-top"><div><span class="panel-icon">◈</span><h2>About Ollama Desk</h2></div><button class="icon-button close-dialog" aria-label="Close">×</button></form>
+    <form method="dialog" class="dialog-top"><div><span class="panel-icon">◈</span><h2>About HelloOllama</h2></div><button class="icon-button close-dialog" aria-label="Close">×</button></form>
     <p class="dialog-description">A private, local interface for chatting with Ollama models, managing your model library, and keeping an eye on system resources.</p>
     <div class="about-facts"><span>Local by default</span><span>Built with ASP.NET Core</span><span>No account or cloud service required</span></div>
     <p class="command-safety">CPU and memory use system metrics. GPU utilization depends on hardware sensors; active model VRAM placement is shown when Ollama reports it.</p>
